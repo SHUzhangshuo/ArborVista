@@ -1,0 +1,8 @@
+pyproject.toml
+mineru.egg-info/PKG-INFO
+mineru.egg-info/SOURCES.txt
+mineru.egg-info/dependency_links.txt
+mineru.egg-info/entry_points.txt
+mineru.egg-info/not-zip-safe
+mineru.egg-info/requires.txt
+mineru.egg-info/top_level.txt

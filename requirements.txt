@@ -1,0 +1,73 @@
+# ArborVista 项目依赖
+
+# Web框架
+Flask==3.1.2
+Flask-CORS==6.0.1
+Werkzeug==3.1.3
+
+# 基础工具
+loguru==0.7.3
+click==8.2.1
+tqdm==4.67.1
+requests==2.32.5
+
+# 图像处理
+pillow==11.3.0
+opencv-python==4.12.0.88
+
+# 数据处理
+numpy==2.2.6
+pandas==2.3.2
+
+# PDF处理
+PyMuPDF==1.26.4
+pdfplumber==0.11.7
+pypdf==6.0.0
+reportlab==4.4.3
+pdfminer.six>=20240706
+pypdfium2>=4.30.0
+pdftext>=0.6.2
+
+# 机器学习基础
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.30.0
+
+# OCR相关
+easyocr==1.7.2
+
+# 其他工具
+psutil==7.0.0
+pyyaml==6.0.2
+boto3==1.40.23
+pydantic==2.11.7
+annotated-types==0.7.0
+pydantic-core==2.33.2
+typing-inspection==0.4.1
+httpx
+modelscope>=1.26.0
+huggingface-hub>=0.32.4
+json-repair>=0.46.2
+fast-langdetect>=0.2.3,<0.3.0
+
+# MinerU Pipeline 依赖
+matplotlib>=3.10,<4
+ultralytics>=8.3.48,<9
+doclayout_yolo==0.0.4
+dill>=0.3.8,<1
+rapid_table>=1.0.5,<2.0.0
+ftfy>=6.3.1,<7
+openai>=1.70.0,<2
+shapely>=2.0.7,<3
+pyclipper>=1.3.0,<2
+omegaconf>=2.3.0,<3
+
+# GPU版本PyTorch和相关依赖 (CUDA 12.6)
+# 注意：需要单独安装PyTorch，使用命令：
+# pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+
+torch>=2.2.2,!=2.5.0,!=2.5.1,<3
+torchvision
+torchaudio
+transformers>=4.49.0,!=4.51.0,<5.0.0
+accelerate>=1.5.1
