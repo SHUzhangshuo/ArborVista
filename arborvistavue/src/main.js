@@ -6,7 +6,15 @@ import MarkdownIt from "markdown-it";
 // Element Plus 引入
 import ElementPlus from "element-plus";
 import "element-plus/dist/index.css";
+import "element-plus/theme-chalk/dark/css-vars.css";
 
+// Element Plus 图标
+import * as ElementPlusIconsVue from "@element-plus/icons-vue";
+
+// Element Plus 中文语言包
+import zhCn from "element-plus/dist/locale/zh-cn.mjs";
+
+// Markdown 相关插件
 import taskLists from "markdown-it-task-lists";
 import mathjax3 from "markdown-it-mathjax3";
 import toc from "markdown-it-table-of-contents";
@@ -14,6 +22,10 @@ import anchor from "markdown-it-anchor";
 import hljs from "highlight.js";
 import "highlight.js/styles/github.css";
 
+// 引入自定义 Markdown 样式
+import "./assets/markdown.css";
+
+// 创建 MarkdownIt 实例
 const md = new MarkdownIt({
   html: true, // 允许 HTML 标签
   breaks: true, // 转换换行符为 <br>
@@ -35,7 +47,6 @@ const md = new MarkdownIt({
 });
 
 // 逐个添加插件，避免链式调用出错
-
 try {
   md.use(taskLists, { enabled: true });
   console.log("✅ taskLists plugin loaded");
@@ -71,13 +82,40 @@ try {
   console.warn("❌ toc plugin failed:", e);
 }
 
+// 创建 Vue 应用
 const app = createApp(App);
 
-// 添加到全局属性
+// 添加 MarkdownIt 到全局属性
 app.config.globalProperties.$md = md;
 
-// 使用 Element Plus
-app.use(ElementPlus);
+// 注册所有 Element Plus 图标
+for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+  app.component(key, component);
+}
 
+// 使用 Element Plus
+app.use(ElementPlus, {
+  locale: zhCn, // 设置中文语言包
+  size: "default", // 设置组件默认尺寸
+  zIndex: 3000, // 设置弹层初始 z-index
+});
+
+// 使用路由
 app.use(router);
+
+// 挂载应用
 app.mount("#app");
+
+// 全局错误处理
+app.config.errorHandler = (err, vm, info) => {
+  console.error("Vue Error:", err);
+  console.error("Component:", vm);
+  console.error("Info:", info);
+};
+
+// 全局警告处理
+app.config.warnHandler = (msg, vm, trace) => {
+  console.warn("Vue Warning:", msg);
+  console.warn("Component:", vm);
+  console.warn("Trace:", trace);
+};

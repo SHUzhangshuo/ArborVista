@@ -1,84 +1,109 @@
 @echo off
 chcp 65001 >nul
 
-REM 切换到脚本所在目录
+REM Switch to script directory
 cd /d "%~dp0"
 
 echo ========================================
-echo     ArborVista 智能论文阅读助手
+echo     ArborVista Smart Paper Reader
 echo ========================================
 
-REM 检查Python环境
+REM Check Python environment
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [错误] 未找到Python环境，请先安装Python
+    echo [ERROR] Python not found, please install Python first
     pause
     exit /b 1
 )
 
-REM 检查是否在虚拟环境中
-echo [信息] 当前Python环境: %CONDA_DEFAULT_ENV%
-echo [信息] 当前工作目录: %CD%
+REM Check if in virtual environment
+echo [INFO] Current Python environment: %CONDA_DEFAULT_ENV%
+echo [INFO] Current working directory: %CD%
 
-REM 检查必要文件是否存在
+REM Check if necessary files exist
 if not exist "requirements.txt" (
-    echo [错误] 未找到requirements.txt文件，请确保在ArborVista项目根目录下运行
+    echo [ERROR] requirements.txt not found, please run in ArborVista root directory
     pause
     exit /b 1
 )
 
 if not exist "app\app.py" (
-    echo [错误] 未找到app\app.py文件，请确保在ArborVista项目根目录下运行
+    echo [ERROR] app\app.py not found, please run in ArborVista root directory
     pause
     exit /b 1
 )
 
 if not exist "arborvistavue\package.json" (
-    echo [错误] 未找到arborvistavue\package.json文件，请确保在ArborVista项目根目录下运行
+    echo [ERROR] arborvistavue\package.json not found, please run in ArborVista root directory
     pause
     exit /b 1
 )
 
-REM 安装依赖
-echo [信息] 安装Python依赖...
+REM Set environment variables
+echo [INFO] Setting environment variables...
+if "%MINERU_API_TOKEN%"=="" (
+    echo [WARNING] MINERU_API_TOKEN not set, please set it manually:
+    echo   set MINERU_API_TOKEN=your_token_here
+    echo [INFO] You can also create a .env file with MINERU_API_TOKEN=your_token_here
+) else (
+    echo [INFO] MINERU_API_TOKEN is already set
+)
+
+REM Install dependencies
+echo [INFO] Installing Python dependencies...
 pip install -r requirements.txt
 if %errorlevel% neq 0 (
-    echo [警告] 依赖安装可能有问题，但继续启动...
+    echo [ERROR] Failed to install dependencies, please check network or Python environment
+    pause
+    exit /b 1
 )
 
-REM 安装mineru模块
-echo [信息] 安装MinerU模块...
-pip install -e ./mineru
-if %errorlevel% neq 0 (
-    echo [警告] MinerU模块安装可能有问题，但继续启动...
-)
-
-REM 启动后端服务
-echo [信息] 启动后端服务...
+REM Start backend service
+echo [INFO] Starting backend service...
 start "ArborVista Backend" cmd /k "cd /d %~dp0 && python app\app.py"
 
-REM 等待后端启动
-echo [信息] 等待后端服务启动...
+REM Wait for backend to start
+echo [INFO] Waiting for backend service to start...
 timeout /t 3 /nobreak >nul
 
-REM 检查前端依赖
-echo [信息] 检查前端依赖...
+REM Check frontend dependencies
+echo [INFO] Checking frontend dependencies...
 cd arborvistavue
 if not exist "node_modules" (
-    echo [信息] 安装前端依赖...
+    echo [INFO] Installing frontend dependencies...
     npm install
 )
 
-REM 启动前端服务
-echo [信息] 启动前端服务...
+REM Start frontend service
+echo [INFO] Starting frontend service...
 start "ArborVista Frontend" cmd /k "cd /d \"%~dp0arborvistavue\" & npm run serve"
+
+REM Get local IP address
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
+    for /f "tokens=1" %%b in ("%%a") do (
+        set LOCAL_IP=%%b
+        goto :ip_found
+    )
+)
+:ip_found
 
 echo.
 echo ========================================
-echo 项目启动完成！
-echo 后端服务: http://localhost:5000
-echo 前端服务: http://localhost:8080
-echo 注意: 服务仅限本地访问
+echo Project started successfully!
+echo.
+echo Local access addresses:
+echo   Backend: http://127.0.0.1:5000
+echo   Frontend: http://127.0.0.1:8080
+echo.
+echo Network access addresses:
+echo   Backend: http://%LOCAL_IP%:5000
+echo   Frontend: http://%LOCAL_IP%:8080
+echo.
+echo Notes:
+echo   - MINERU_API_TOKEN environment variable is set
+echo   - Stable network connection required for MinerU API
+echo   - Other devices can access via network addresses
+echo   - Ensure firewall allows ports 5000 and 8080
 echo ========================================
-echo 按任意键退出...
+echo Press any key to exit...
 pause >nul

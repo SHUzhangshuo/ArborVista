@@ -1,13 +1,24 @@
 const { defineConfig } = require("@vue/cli-service");
+
 module.exports = defineConfig({
   transpileDependencies: true,
-  // 允许外部访问配置
+  // 网络开发配置 - 支持外部访问
   devServer: {
-    host: "localhost", // 只允许本地访问
+    host: "0.0.0.0", // 允许外部访问
     port: 8080,
-    allowedHosts: "localhost", // 只允许localhost主机
+    // 添加代理配置 - 指向后端地址
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:5000",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+    // 允许外部访问
+    allowedHosts: "all",
+    // 禁用主机检查
     client: {
-      webSocketURL: "auto://localhost:0/ws", // WebSocket配置
+      webSocketURL: "auto://0.0.0.0:0/ws",
     },
   },
 });

@@ -1,44 +1,157 @@
 <template>
-  <div class="home">
+  <div class="home-container">
     <!-- 英雄区域 -->
-    <section class="hero">
-      <!-- 背景装饰元素 -->
-      <div class="hero-bg-elements">
-        <div class="floating-shape shape-1"></div>
-        <div class="floating-shape shape-2"></div>
-        <div class="floating-shape shape-3"></div>
-        <div class="floating-shape shape-4"></div>
-        <div class="floating-shape shape-5"></div>
+    <section class="hero-section">
+      <div class="hero-container">
+        <div class="hero-content">
+          <div class="hero-text">
+            <h1 class="hero-title">
+              <span class="title-icon">
+                <el-icon size="48">
+                  <Document />
+                </el-icon>
+              </span>
+              ArborVista
+            </h1>
+            <p class="hero-subtitle">智能文档处理平台，让文档管理更简单高效</p>
+            <div class="hero-features">
+              <div
+                v-for="feature in heroFeatures"
+                :key="feature"
+                class="feature-item"
+              >
+                <el-icon class="feature-icon"><Check /></el-icon>
+                <span>{{ feature }}</span>
+              </div>
+            </div>
+            <div class="hero-actions">
+              <el-button type="primary" size="large" class="cta-button">
+                <el-icon><Upload /></el-icon>
+                开始处理文档
+              </el-button>
+            </div>
+          </div>
+          <div class="hero-visual">
+            <div class="visual-card">
+              <div class="card-header">
+                <div class="card-dots">
+                  <span class="dot red"></span>
+                  <span class="dot yellow"></span>
+                  <span class="dot green"></span>
+                </div>
+                <span class="card-title">文档处理预览</span>
+              </div>
+              <div class="card-content">
+                <div class="file-preview">
+                  <el-icon size="32"><Document /></el-icon>
+                  <span>PDF文档.pdf</span>
+                </div>
+                <div class="processing-steps">
+                  <div class="step completed">
+                    <el-icon><Check /></el-icon>
+                    <span>OCR识别</span>
+                  </div>
+                  <div class="step completed">
+                    <el-icon><Check /></el-icon>
+                    <span>公式提取</span>
+                  </div>
+                  <div class="step processing">
+                    <el-icon><Loading /></el-icon>
+                    <span>表格识别</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+    </section>
 
-      <div class="hero-content">
-        <div class="hero-badge">
-          <span class="badge-icon">🚀</span>
-          <span class="badge-text">AI驱动</span>
+    <!-- 配置区域 -->
+    <section class="config-section">
+      <div class="section-container">
+        <div class="section-header">
+          <h2 class="section-title">处理配置</h2>
+          <p class="section-subtitle">自定义文档处理参数，获得最佳处理效果</p>
         </div>
 
-        <h1 class="hero-title">
-          <span class="title-line">智能论文阅读</span>
-          <span class="title-line">从这里开始</span>
-        </h1>
-
-        <p class="hero-subtitle">
-          上传您的PDF、图片等文档，览树将自动解析并转换为易读的Markdown格式，
-          让学术阅读变得更加高效和愉悦
-        </p>
-
-        <div class="hero-features">
-          <div class="feature-tag">
-            <span class="tag-icon">📚</span>
-            <span>多格式支持</span>
+        <div class="config-grid">
+          <!-- 文库选择 -->
+          <div class="config-card">
+            <div class="card-header">
+              <el-icon class="card-icon"><Collection /></el-icon>
+              <h3 class="card-title">选择文库</h3>
+            </div>
+            <div class="card-content">
+              <el-select
+                v-model="selectedLibrary"
+                placeholder="选择文库"
+                @change="onLibraryChange"
+                class="library-select"
+                size="large"
+              >
+                <el-option
+                  v-for="library in libraries"
+                  :key="library.id"
+                  :label="library.name"
+                  :value="library.id"
+                />
+              </el-select>
+              <el-button
+                @click="showCreateLibraryDialog = true"
+                class="create-library-btn"
+                size="large"
+              >
+                <el-icon><Plus /></el-icon>
+                创建新文库
+              </el-button>
+            </div>
           </div>
-          <div class="feature-tag">
-            <span class="tag-icon">⚡</span>
-            <span>快速处理</span>
+
+          <!-- 处理选项 -->
+          <div class="config-card">
+            <div class="card-header">
+              <el-icon class="card-icon"><Setting /></el-icon>
+              <h3 class="card-title">处理选项</h3>
+            </div>
+            <div class="card-content">
+              <div class="option-group">
+                <el-switch v-model="isOcr" active-text="OCR识别" size="large" />
+                <el-switch
+                  v-model="enableFormula"
+                  active-text="公式识别"
+                  size="large"
+                />
+                <el-switch
+                  v-model="enableTable"
+                  active-text="表格识别"
+                  size="large"
+                />
+              </div>
+            </div>
           </div>
-          <div class="feature-tag">
-            <span class="tag-icon">🔒</span>
-            <span>隐私安全</span>
+
+          <!-- 语言设置 -->
+          <div class="config-card">
+            <div class="card-header">
+              <el-icon class="card-icon"><Collection /></el-icon>
+              <h3 class="card-title">语言设置</h3>
+            </div>
+            <div class="card-content">
+              <el-select
+                v-model="language"
+                placeholder="选择语言"
+                class="language-select"
+                size="large"
+              >
+                <el-option
+                  v-for="lang in languageOptions"
+                  :key="lang.value"
+                  :label="lang.label"
+                  :value="lang.value"
+                />
+              </el-select>
+            </div>
           </div>
         </div>
       </div>
@@ -46,1155 +159,1009 @@
 
     <!-- 文件上传区域 -->
     <section class="upload-section">
-      <div class="upload-container">
-        <!-- 配置选择区域 -->
-        <div class="config-section">
-          <h3 class="config-title">处理配置</h3>
-          <div class="config-grid">
-            <div class="config-item">
-              <label for="method">解析方法</label>
-              <el-select
-                v-model="selectedConfig.method"
-                placeholder="请选择解析方法"
-                class="config-select"
-                clearable
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="method in configOptions.methods"
-                  :key="method"
-                  :label="getMethodLabel(method)"
-                  :value="method"
-                />
-              </el-select>
-            </div>
-
-            <div class="config-item">
-              <label for="language">文档语言</label>
-              <el-select
-                v-model="selectedConfig.language"
-                placeholder="请选择文档语言"
-                class="config-select"
-                clearable
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="lang in configOptions.languages"
-                  :key="lang"
-                  :label="getLanguageLabel(lang)"
-                  :value="lang"
-                />
-              </el-select>
-            </div>
-          </div>
+      <div class="section-container">
+        <div class="section-header">
+          <h2 class="section-title">上传文档</h2>
+          <p class="section-subtitle">支持PDF、PNG、JPG格式，拖拽或点击上传</p>
         </div>
 
-        <div
-          class="upload-area"
-          :class="{ dragover: isDragOver, uploading: isUploading }"
-          @drop="handleDrop"
-          @dragover="handleDragOver"
-          @dragleave="handleDragLeave"
-          @click="triggerFileInput"
+        <el-upload
+          ref="uploadRef"
+          :file-list="fileList"
+          :auto-upload="false"
+          :on-change="handleFileChange"
+          :on-remove="handleFileRemove"
+          :before-upload="beforeUpload"
+          drag
+          multiple
+          class="upload-dragger"
         >
-          <div class="upload-icon">
-            <svg
-              width="64"
-              height="64"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
+          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+          <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+          <template #tip>
+            <div class="el-upload__tip">
+              支持 PDF、PNG、JPG 格式，最大 100MB
+            </div>
+          </template>
+        </el-upload>
+
+        <div v-if="fileList.length > 0" class="file-list">
+          <div class="file-list-header">
+            <div class="file-count-info">
+              <el-icon class="count-icon"><Document /></el-icon>
+              <h3>已选择文件 ({{ fileList.length }})</h3>
+            </div>
+            <el-button
+              @click="clearFiles"
+              type="danger"
+              size="small"
+              class="clear-btn"
             >
-              <path
-                d="M12 16L12 8M12 8L15 11M12 8L9 11"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <path
-                d="M3 15V16C3 18.8284 3 20.2426 3.87868 21.1213C4.75736 22 6.17157 22 9 22H15C17.8284 22 19.2426 22 20.1213 21.1213C21 20.2426 21 18.8284 21 16V15"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
+              <el-icon><Delete /></el-icon>
+              清空
+            </el-button>
           </div>
-          <h3 class="upload-title">拖拽文件到这里，或点击上传</h3>
-          <p class="upload-subtitle">支持 PDF、PNG、JPG、JPEG 等格式</p>
-          <input
-            ref="fileInput"
-            type="file"
-            accept=".pdf,.png,.jpg,.jpeg"
-            @change="handleFileSelect"
-            style="display: none"
+          <div class="file-items">
+            <div
+              v-for="(file, index) in fileList"
+              :key="index"
+              class="file-item"
+            >
+              <div class="file-item-left">
+                <div class="file-icon-container">
+                  <el-icon class="file-icon"><Document /></el-icon>
+                </div>
+                <div class="file-info">
+                  <span class="file-name">{{ file.name }}</span>
+                  <span class="file-size">{{ formatFileSize(file.size) }}</span>
+                </div>
+              </div>
+              <el-button
+                @click="removeFile(index)"
+                type="danger"
+                size="small"
+                circle
+                class="remove-btn"
+              >
+                <el-icon><Close /></el-icon>
+              </el-button>
+            </div>
+          </div>
+        </div>
+
+        <div class="upload-actions">
+          <el-button
+            @click="startProcessing"
+            type="primary"
+            size="large"
+            :loading="isProcessing"
+            :disabled="fileList.length === 0"
+            class="process-button"
+          >
+            <el-icon v-if="!isProcessing"><Setting /></el-icon>
+            {{
+              isProcessing
+                ? "处理中..."
+                : `开始处理 (${fileList.length} 个文件)`
+            }}
+          </el-button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 创建文库对话框 -->
+    <el-dialog
+      v-model="showCreateLibraryDialog"
+      title="创建新文库"
+      width="500px"
+      :before-close="handleCreateLibraryClose"
+      class="create-library-dialog"
+    >
+      <el-form
+        ref="libraryFormRef"
+        :model="newLibrary"
+        :rules="libraryRules"
+        label-width="80px"
+      >
+        <el-form-item label="文库名称" prop="name">
+          <el-input
+            v-model="newLibrary.name"
+            placeholder="请输入文库名称"
+            size="large"
           />
+        </el-form-item>
+        <el-form-item label="描述" prop="description">
+          <el-input
+            v-model="newLibrary.description"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入文库描述（可选）"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showCreateLibraryDialog = false" size="large">
+            取消
+          </el-button>
+          <el-button
+            type="primary"
+            @click="createLibrary"
+            :loading="isCreatingLibrary"
+            size="large"
+          >
+            创建
+          </el-button>
         </div>
-      </div>
-    </section>
-
-    <!-- 功能特性 -->
-    <section class="features">
-      <h2 class="features-title">为什么选择览树？</h2>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon">🚀</div>
-          <h3>智能解析</h3>
-          <p>基于先进的AI技术，自动识别文档内容，提取文字、表格、公式等</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">📱</div>
-          <h3>多格式支持</h3>
-          <p>支持PDF、图片等多种格式，满足不同文档类型的需求</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🎨</div>
-          <h3>优雅阅读</h3>
-          <p>转换为Markdown格式，提供清晰、美观的阅读体验</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- 上传进度提示 -->
-    <div v-if="isUploading" class="upload-progress">
-      <div class="progress-content">
-        <div class="progress-spinner"></div>
-        <p>正在处理您的文档，请稍候...</p>
-      </div>
-    </div>
-
-    <!-- 成功提示 -->
-    <div v-if="uploadSuccess" class="success-message">
-      <div class="success-content">
-        <div class="success-icon">✅</div>
-        <p>{{ successMessage }}</p>
-        <button @click="goToLibrary" class="success-button">查看文档</button>
-      </div>
-    </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import axios from "axios";
-import { API_ENDPOINTS } from "../config/api.js";
+import {
+  Document,
+  Check,
+  Upload,
+  UploadFilled,
+  Collection,
+  Plus,
+  Setting,
+  Close,
+  Loading,
+} from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import { uploadFiles, getLibraries, createLibrary } from "@/config/api";
 
 export default {
-  name: "HomePage",
+  name: "HomeView",
+  components: {
+    Document,
+    Check,
+    Upload,
+    UploadFilled,
+    Collection,
+    Plus,
+    Setting,
+    Close,
+    Loading,
+  },
   data() {
     return {
-      isDragOver: false,
-      isUploading: false,
-      uploadSuccess: false,
-      successMessage: "",
-      configOptions: {
-        methods: ["auto", "txt", "ocr"],
-        languages: [
-          "ch",
-          "ch_server",
-          "ch_lite",
-          "en",
-          "korean",
-          "japan",
-          "chinese_cht",
-          "ta",
-          "te",
-          "ka",
-          "latin",
-          "arabic",
-          "east_slavic",
-          "cyrillic",
-          "devanagari",
+      // 英雄区域数据
+      heroFeatures: [
+        "智能OCR识别",
+        "数学公式提取",
+        "表格结构识别",
+        "多格式支持",
+        "批量处理",
+        "云端存储",
+      ],
+
+      // 文库数据
+      libraries: [],
+      selectedLibrary: "",
+      showCreateLibraryDialog: false,
+      newLibrary: {
+        name: "",
+        description: "",
+      },
+      libraryRules: {
+        name: [
+          { required: true, message: "请输入文库名称", trigger: "blur" },
+          {
+            min: 2,
+            max: 20,
+            message: "文库名称长度在 2 到 20 个字符",
+            trigger: "blur",
+          },
         ],
-        defaults: {
-          method: "auto",
-          language: "ch",
-        },
       },
-      selectedConfig: {
-        method: "auto",
-        language: "ch",
-      },
+      isCreatingLibrary: false,
+
+      // 处理配置
+      isOcr: true,
+      enableFormula: true,
+      enableTable: true,
+      language: "ch",
+
+      // 语言选项
+      languageOptions: [
+        { value: "ch", label: "中文" },
+        { value: "en", label: "English" },
+        { value: "ja", label: "日本語" },
+        { value: "ko", label: "한국어" },
+      ],
+
+      // 文件上传
+      fileList: [],
+      isProcessing: false,
     };
   },
+  computed: {
+    selectedLibraryName() {
+      if (!Array.isArray(this.libraries)) {
+        return "未知文库";
+      }
+      const library = this.libraries.find(
+        (lib) => lib.id === this.selectedLibrary
+      );
+      return library ? library.name : "未知文库";
+    },
+  },
+  mounted() {
+    this.loadLibraries();
+  },
   methods: {
-    // 配置标签转换方法
-    getMethodLabel(method) {
-      const labels = {
-        auto: "自动选择",
-        txt: "文本提取",
-        ocr: "OCR识别",
-      };
-      return labels[method] || method;
-    },
+    // 加载文库列表
+    async loadLibraries() {
+      try {
+        const response = await getLibraries();
+        console.log("文库API响应:", response);
+        this.libraries = Array.isArray(response.data.data)
+          ? response.data.data
+          : [];
+        console.log("解析后的文库列表:", this.libraries);
 
-    getLanguageLabel(lang) {
-      const labels = {
-        ch: "中文",
-        ch_server: "中文服务器",
-        ch_lite: "中文轻量",
-        en: "英文",
-        korean: "韩文",
-        japan: "日文",
-        chinese_cht: "繁体中文",
-        ta: "泰米尔语",
-        te: "泰卢固语",
-        ka: "格鲁吉亚语",
-        latin: "拉丁语",
-        arabic: "阿拉伯语",
-        east_slavic: "东斯拉夫语",
-        cyrillic: "西里尔语",
-        devanagari: "天城文",
-      };
-      return labels[lang] || lang;
-    },
+        if (this.libraries.length === 0) {
+          this.libraries = [{ id: "default", name: "默认文库" }];
+        }
 
-    handleDragOver(e) {
-      e.preventDefault();
-      this.isDragOver = true;
-    },
-    handleDragLeave(e) {
-      e.preventDefault();
-      this.isDragOver = false;
-    },
-    handleDrop(e) {
-      e.preventDefault();
-      this.isDragOver = false;
-
-      const files = e.dataTransfer.files;
-      if (files.length > 0) {
-        this.uploadFile(files[0]);
+        // 设置默认选中的文库
+        if (!this.selectedLibrary && this.libraries.length > 0) {
+          this.selectedLibrary = this.libraries[0].id;
+        }
+      } catch (error) {
+        console.error("加载文库失败:", error);
+        this.libraries = [{ id: "default", name: "默认文库" }];
+        this.selectedLibrary = "default";
       }
     },
-    triggerFileInput() {
-      this.$refs.fileInput.click();
+
+    // 文库选择变化
+    onLibraryChange() {
+      console.log("选择文库:", this.selectedLibrary);
     },
-    handleFileSelect(e) {
-      const file = e.target.files[0];
-      if (file) {
-        this.uploadFile(file);
+
+    // 创建文库
+    async createLibrary() {
+      try {
+        await this.$refs.libraryFormRef.validate();
+        this.isCreatingLibrary = true;
+
+        await createLibrary({
+          name: this.newLibrary.name,
+          description: this.newLibrary.description,
+        });
+
+        ElMessage.success("文库创建成功");
+        this.showCreateLibraryDialog = false;
+        this.newLibrary = { name: "", description: "" };
+        this.loadLibraries();
+      } catch (error) {
+        console.error("创建文库失败:", error);
+        ElMessage.error("创建文库失败");
+      } finally {
+        this.isCreatingLibrary = false;
       }
     },
-    async uploadFile(file) {
-      this.isUploading = true;
-      this.uploadSuccess = false;
+
+    // 关闭创建文库对话框
+    handleCreateLibraryClose(done) {
+      this.newLibrary = { name: "", description: "" };
+      this.$refs.libraryFormRef.resetFields();
+      done();
+    },
+
+    // 文件变化处理
+    handleFileChange(file, fileList) {
+      this.fileList = fileList;
+    },
+
+    // 文件移除处理
+    handleFileRemove(file, fileList) {
+      this.fileList = fileList;
+    },
+
+    // 上传前检查
+    beforeUpload(file) {
+      const allowedTypes = ["application/pdf", "image/png", "image/jpeg"];
+      const isAllowed = allowedTypes.includes(file.type);
+      if (!isAllowed) {
+        ElMessage.error("只支持 PDF、PNG、JPG 格式的文件");
+        return false;
+      }
+      return true;
+    },
+
+    // 移除文件
+    removeFile(index) {
+      this.fileList.splice(index, 1);
+    },
+
+    // 清空文件
+    clearFiles() {
+      this.fileList = [];
+    },
+
+    // 格式化文件大小
+    formatFileSize(size) {
+      if (size < 1024) return size + " B";
+      if (size < 1024 * 1024) return (size / 1024).toFixed(1) + " KB";
+      return (size / (1024 * 1024)).toFixed(1) + " MB";
+    },
+
+    // 开始处理
+    async startProcessing() {
+      if (this.fileList.length === 0) {
+        ElMessage.warning("请先选择文件");
+        return;
+      }
+
+      if (!this.selectedLibrary) {
+        ElMessage.warning("请先选择文库");
+        return;
+      }
+
+      this.isProcessing = true;
 
       try {
         const formData = new FormData();
-        formData.append("file", file);
-        formData.append("method", this.selectedConfig.method);
-        formData.append("backend", "pipeline");
-        formData.append("language", this.selectedConfig.language);
-
-        const response = await axios.post(API_ENDPOINTS.UPLOAD, formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
+        this.fileList.forEach((file) => {
+          formData.append("files", file.raw);
         });
 
+        formData.append("library_id", this.selectedLibrary);
+        formData.append("is_ocr", this.isOcr);
+        formData.append("enable_formula", this.enableFormula);
+        formData.append("enable_table", this.enableTable);
+        formData.append("language", this.language);
+
+        const response = await uploadFiles(formData);
+
         if (response.data.success) {
-          this.successMessage = '文档 "' + file.name + '" 处理成功！';
-          this.uploadSuccess = true;
-          // 3秒后自动跳转
-          setTimeout(() => {
-            this.goToLibrary();
-          }, 3000);
+          ElMessage.success(response.data.message);
+          this.fileList = [];
+          this.$refs.uploadRef.clearFiles();
+        } else {
+          ElMessage.error(response.data.error || "处理失败");
         }
       } catch (error) {
-        console.error("上传失败:", error);
-        alert("上传失败，请重试");
+        console.error("处理失败:", error);
+        ElMessage.error("处理失败，请重试");
       } finally {
-        this.isUploading = false;
+        this.isProcessing = false;
       }
-    },
-    goToLibrary() {
-      this.$router.push("/library");
     },
   },
 };
 </script>
 
 <style scoped>
-.home {
+.home-container {
   min-height: 100vh;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 1rem;
+  background: var(--bg-primary);
 }
 
 /* 英雄区域 */
-.hero {
-  text-align: center;
-  padding: 1.5rem 1rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-  color: white;
-  margin: -2rem 0 2rem 0;
+.hero-section {
+  padding: var(--space-3xl) 0;
+  background: linear-gradient(
+    135deg,
+    var(--bg-primary) 0%,
+    var(--bg-secondary) 100%
+  );
   position: relative;
   overflow: hidden;
-  border-radius: 0 0 20px 20px;
-  width: 100%;
+}
+
+.hero-container {
   max-width: 1200px;
-  margin-left: auto;
-  margin-right: auto;
-  box-sizing: border-box;
-}
-
-/* 背景装饰元素 */
-.hero-bg-elements {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-}
-
-.floating-shape {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  animation: float 6s ease-in-out infinite;
-}
-
-.shape-1 {
-  width: 80px;
-  height: 80px;
-  top: 20%;
-  left: 10%;
-  animation-delay: 0s;
-}
-
-.shape-2 {
-  width: 120px;
-  height: 120px;
-  top: 60%;
-  right: 15%;
-  animation-delay: 1s;
-}
-
-.shape-3 {
-  width: 60px;
-  height: 60px;
-  bottom: 30%;
-  left: 20%;
-  animation-delay: 2s;
-}
-
-.shape-4 {
-  width: 100px;
-  height: 100px;
-  top: 30%;
-  right: 30%;
-  animation-delay: 3s;
-}
-
-.shape-5 {
-  width: 40px;
-  height: 40px;
-  bottom: 20%;
-  right: 10%;
-  animation-delay: 4s;
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0px) rotate(0deg);
-    opacity: 0.3;
-  }
-  50% {
-    transform: translateY(-20px) rotate(180deg);
-    opacity: 0.6;
-  }
+  margin: 0 auto;
+  padding: 0 var(--space-lg);
 }
 
 .hero-content {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 0;
-  position: relative;
-  z-index: 2;
-}
-
-/* AI驱动徽章 */
-.hero-badge {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3xl);
   align-items: center;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50px;
-  padding: 0.6rem 1.25rem;
-  margin-bottom: 1.5rem;
-  animation: slideInDown 0.8s ease-out;
 }
 
-.badge-icon {
-  font-size: 1.2rem;
-  margin-right: 0.5rem;
-  animation: bounce 2s infinite;
-}
-
-.badge-text {
-  font-size: 0.9rem;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+.hero-text {
+  max-width: 600px;
 }
 
 .hero-title {
-  font-size: 3rem;
+  font-size: 64px;
   font-weight: 700;
-  margin-bottom: 1.5rem;
-  line-height: 1.2;
-  animation: slideInUp 0.8s ease-out 0.2s both;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-lg) 0;
+  line-height: 1.1;
+  letter-spacing: -2px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
 }
 
-.title-line {
-  display: block;
-  background: linear-gradient(45deg, #ffffff, #f0f8ff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.title-line:last-child {
-  background: linear-gradient(45deg, #f0f8ff, #ffffff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.title-icon {
+  color: var(--primary-color);
+  filter: drop-shadow(0 4px 12px rgba(0, 122, 255, 0.3));
 }
 
 .hero-subtitle {
-  font-size: 1.25rem;
-  opacity: 0.95;
-  line-height: 1.6;
-  margin-bottom: 2rem;
-  animation: slideInUp 0.8s ease-out 0.4s both;
+  font-size: 24px;
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-xl) 0;
+  line-height: 1.4;
+  font-weight: 400;
 }
 
-/* 特性标签 */
 .hero-features {
-  display: flex;
-  justify-content: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  animation: slideInUp 0.8s ease-out 0.6s both;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
 }
 
-.feature-tag {
+.feature-item {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 25px;
-  padding: 0.6rem 1rem;
-  transition: all 0.3s ease;
-  cursor: pointer;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  transition: var(--transition-fast);
 }
 
-.feature-tag:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-3px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+.feature-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
-.tag-icon {
-  font-size: 1.1rem;
-  margin-right: 0.5rem;
+.feature-icon {
+  color: var(--primary-color);
+  font-size: 16px;
 }
 
-/* 动画效果 */
-@keyframes slideInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.hero-actions {
+  margin-top: var(--space-xl);
 }
 
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.cta-button {
+  padding: var(--space-md) var(--space-xl);
+  font-size: 18px;
+  font-weight: 600;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  transition: var(--transition-normal);
 }
 
-@keyframes bounce {
-  0%,
-  20%,
-  50%,
-  80%,
-  100% {
-    transform: translateY(0);
-  }
-  40% {
-    transform: translateY(-10px);
-  }
-  60% {
-    transform: translateY(-5px);
-  }
+.cta-button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-xl);
 }
 
-/* 上传区域 */
-.upload-section {
-  margin-bottom: 4rem;
-  width: 100%;
+/* 英雄区域视觉元素 */
+.hero-visual {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.upload-container {
-  max-width: 1000px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-/* 配置选择区域 */
-.config-section {
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  padding: 2.5rem;
-  border-radius: 20px;
-  margin-bottom: 2rem;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1),
-    0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  position: relative;
+.visual-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-xl);
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+  max-width: 400px;
+  backdrop-filter: blur(20px);
 }
 
-.config-section:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.15),
-    0 8px 12px -4px rgba(0, 0, 0, 0.1);
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-light);
 }
 
-.config-section::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #667eea, #764ba2, #f093fb, #f5576c);
-  border-radius: 20px 20px 0 0;
+.card-dots {
+  display: flex;
+  gap: var(--space-xs);
 }
 
-.config-section::after {
-  content: "";
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  width: 60px;
-  height: 60px;
-  background: linear-gradient(
-    135deg,
-    rgba(102, 126, 234, 0.1),
-    rgba(118, 75, 162, 0.1)
-  );
+.dot {
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  opacity: 0.6;
-  z-index: 0;
 }
 
-/* 配置项装饰 */
-.config-item::before {
-  content: "";
-  position: absolute;
-  top: -10px;
-  left: -10px;
-  width: 20px;
-  height: 20px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  border-radius: 50%;
-  opacity: 0.3;
-  z-index: -1;
+.dot.red {
+  background: #ff5f57;
 }
 
-.config-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin-bottom: 2rem;
-  color: #1f2937;
+.dot.yellow {
+  background: #ffbd2e;
+}
+
+.dot.green {
+  background: #28ca42;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.card-content {
+  padding: var(--space-lg);
+}
+
+.file-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+}
+
+.processing-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  transition: var(--transition-fast);
+}
+
+.step.completed {
+  background: rgba(40, 202, 66, 0.1);
+  color: #28ca42;
+}
+
+.step.processing {
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--primary-color);
+}
+
+/* 配置区域 */
+.config-section {
+  padding: var(--space-3xl) 0;
+  background: var(--bg-primary);
+}
+
+.section-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-lg);
+}
+
+.section-header {
   text-align: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  position: relative;
+  margin-bottom: var(--space-3xl);
 }
 
-.config-title::after {
-  content: "";
-  position: absolute;
-  bottom: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 60px;
-  height: 3px;
-  background: linear-gradient(90deg, #667eea, #764ba2);
-  border-radius: 2px;
+.section-title {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-md) 0;
+  letter-spacing: -1px;
+}
+
+.section-subtitle {
+  font-size: 20px;
+  color: var(--text-secondary);
+  margin: 0;
+  font-weight: 400;
 }
 
 .config-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 2.5rem;
-  max-width: 800px;
-  margin: 0 auto;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-lg);
 }
 
-.config-item {
+.config-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  transition: var(--transition-normal);
+  backdrop-filter: blur(20px);
+}
+
+.config-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.card-icon {
+  color: var(--primary-color);
+  font-size: 20px;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.card-content {
+  padding: var(--space-lg);
+}
+
+.library-select,
+.language-select,
+.model-select {
+  width: 100%;
+  margin-bottom: var(--space-md);
+}
+
+.create-library-btn {
+  width: 100%;
+  border-radius: var(--radius-md);
+}
+
+.option-group {
   display: flex;
   flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* 上传区域 */
+.upload-section {
+  padding: var(--space-3xl) 0;
+  background: var(--bg-secondary);
+}
+
+.upload-dragger {
+  width: 100%;
+  margin-bottom: var(--space-xl);
+  border: none !important;
+  background: transparent !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
   position: relative;
+  overflow: visible;
 }
 
-.config-item label {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #374151;
-  margin-bottom: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  position: relative;
-  padding-left: 1rem;
+.upload-dragger:hover {
+  background: transparent !important;
+  transform: none;
+  box-shadow: none !important;
 }
 
-.config-item label::before {
-  content: "⚙️";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.8rem;
+.upload-dragger:active {
+  transform: none;
+  box-shadow: none !important;
 }
 
-/* Element Plus 下拉框美化样式 */
-.config-select {
-  /* 自定义下拉框样式 */
-}
-
-.config-select :deep(.el-input__wrapper) {
-  padding: 1rem 1.25rem;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
-  font-size: 1rem;
-  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
-  color: #1f2937;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  cursor: pointer;
-  font-weight: 500;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  position: relative;
-  appearance: none;
-  padding-right: 3rem;
-}
-
-.config-select :deep(.el-input__wrapper:hover) {
-  border-color: #667eea;
-  background: linear-gradient(135deg, #ffffff 0%, #f0f4ff 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
-}
-
-.config-select :deep(.el-input__wrapper.is-focus) {
-  outline: none;
-  border-color: #667eea;
-  background: linear-gradient(135deg, #ffffff 0%, #f0f4ff 100%);
-  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1),
-    0 8px 25px rgba(102, 126, 234, 0.15);
-  transform: translateY(-2px);
-}
-
-.config-select :deep(.el-input__inner) {
-  color: #1f2937;
-  font-weight: 500;
-}
-
-.config-select :deep(.el-input__suffix) {
-  color: #6b7280;
+/* 美化上传图标 */
+.upload-dragger .el-icon--upload {
+  font-size: 48px !important;
+  color: var(--primary-color) !important;
+  margin-bottom: 16px !important;
+  filter: drop-shadow(0 2px 8px rgba(0, 122, 255, 0.2));
   transition: all 0.3s ease;
 }
 
-.config-select :deep(.el-input__suffix:hover) {
-  color: #667eea;
+.upload-dragger:hover .el-icon--upload {
+  transform: scale(1.1);
+  filter: drop-shadow(0 4px 12px rgba(0, 122, 255, 0.3));
+}
+
+/* 美化上传文字 */
+.upload-dragger .el-upload__text {
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  color: var(--text-primary) !important;
+  margin-bottom: 8px !important;
+  transition: color 0.3s ease;
+}
+
+.upload-dragger:hover .el-upload__text {
+  color: var(--primary-color) !important;
+}
+
+.upload-dragger .el-upload__text em {
+  color: var(--primary-color) !important;
+  font-style: normal !important;
+  font-weight: 600 !important;
+}
+
+/* 美化提示文字 */
+.upload-dragger .el-upload__tip {
+  font-size: 14px !important;
+  color: var(--text-secondary) !important;
+  margin-top: 8px !important;
+  opacity: 0.8;
+  transition: opacity 0.3s ease;
+}
+
+.upload-dragger:hover .el-upload__tip {
+  opacity: 1;
+}
+
+.file-list {
+  margin-top: var(--space-lg);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  box-shadow: none;
+}
+
+.file-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) 0;
+  background: transparent;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: var(--space-md);
+}
+
+.file-count-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.count-icon {
+  color: var(--primary-color);
+  font-size: 20px;
+}
+
+.file-list-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.clear-btn {
+  border-radius: var(--radius-md);
+  font-weight: 500;
+}
+
+.file-items {
+  padding: var(--space-md);
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  background: transparent;
+  border-radius: 0;
+  margin-bottom: var(--space-sm);
+  transition: var(--transition-fast);
+  border: none;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.file-item:hover {
+  background: #f9fafb;
+  transform: none;
+  box-shadow: none;
+}
+
+.file-item:last-child {
+  margin-bottom: 0;
+}
+
+.file-item-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex: 1;
+}
+
+.file-icon-container {
+  width: 32px;
+  height: 32px;
+  background: #f3f4f6;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-icon {
+  color: var(--primary-color);
+  font-size: 16px;
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.file-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.file-size {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.remove-btn {
+  opacity: 0.7;
+  transition: var(--transition-fast);
+}
+
+.remove-btn:hover {
+  opacity: 1;
   transform: scale(1.1);
 }
 
-/* 下拉选项美化 */
-.config-select :deep(.el-select-dropdown) {
+.upload-actions {
+  text-align: center;
+  margin-top: var(--space-xl);
+}
+
+.process-button {
+  padding: 16px 32px;
+  font-size: 18px;
+  font-weight: 600;
   border-radius: 12px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e5e7eb;
+  box-shadow: 0 4px 15px rgba(0, 122, 255, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(
+    135deg,
+    var(--primary-color),
+    var(--primary-light)
+  ) !important;
+  border: none !important;
+  position: relative;
+  overflow: hidden;
+  min-width: 200px;
 }
 
-.config-select :deep(.el-select-dropdown__item) {
-  padding: 0.75rem 1rem;
-  color: #606266;
-  font-weight: 400;
-  font-size: 0.9rem;
-  transition: all 0.2s ease;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.config-select :deep(.el-select-dropdown__item:hover) {
-  background: linear-gradient(135deg, #f5f7fa 0%, #e8f4fd 100%);
-  color: #409eff;
-  font-weight: 500;
-}
-
-.config-select :deep(.el-select-dropdown__item.is-selected) {
-  background: linear-gradient(135deg, #409eff 0%, #337ecc 100%);
-  color: white;
-  font-weight: 500;
-}
-
-/* 选择框悬停效果 */
-.config-item:hover label {
-  color: #667eea;
-  transform: translateX(4px);
-  transition: all 0.3s ease;
-}
-
-.config-item:hover label::before {
-  animation: spin 0.6s ease-in-out;
-}
-
-.config-item:hover::before {
-  transform: scale(1.5);
-  opacity: 0.6;
-  transition: all 0.3s ease;
-}
-
-/* 配置项悬停时的整体效果 */
-.config-item:hover {
-  transform: translateY(-2px);
-  transition: all 0.3s ease;
-}
-
-@keyframes spin {
-  0% {
-    transform: translateY(-50%) rotate(0deg);
-  }
-  100% {
-    transform: translateY(-50%) rotate(360deg);
-  }
-}
-
-/* 配置区域加载动画 */
-.config-section {
-  animation: fadeInUp 0.6s ease-out;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* 配置项逐个出现动画 */
-.config-item:nth-child(1) {
-  animation: slideInLeft 0.6s ease-out 0.1s both;
-}
-
-.config-item:nth-child(2) {
-  animation: slideInRight 0.6s ease-out 0.2s both;
-}
-
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.upload-area {
-  border: 3px dashed #d1d5db;
-  border-radius: 16px;
-  padding: 3rem 2rem;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  background: white;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-
-.upload-area:hover {
-  border-color: #007aff;
-  background-color: #f8fafc;
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-}
-
-.upload-area.dragover {
-  border-color: #007aff;
-  background-color: #f0f8ff;
-  transform: scale(1.02);
-}
-
-.upload-area.uploading {
-  border-color: #10b981;
-  background-color: #f0fdf4;
-}
-
-.upload-icon {
-  color: #6b7280;
-  margin-bottom: 1.5rem;
-}
-
-.upload-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  color: #1f2937;
-}
-
-.upload-subtitle {
-  color: #6b7280;
-  font-size: 1rem;
-}
-
-/* 功能特性 */
-.features {
-  text-align: center;
-  margin-bottom: 4rem;
-  width: 100%;
-}
-
-.features-title {
-  font-size: 2.5rem;
-  font-weight: 700;
-  margin-bottom: 3rem;
-  color: #1f2937;
-}
-
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 2rem;
-  max-width: 1000px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-.feature-card {
-  background: white;
-  padding: 2rem;
-  border-radius: 16px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
-}
-
-.feature-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-}
-
-.feature-icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-}
-
-.feature-card h3 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
-  color: #1f2937;
-}
-
-.feature-card p {
-  color: #6b7280;
-  line-height: 1.6;
-}
-
-/* 上传进度 */
-.upload-progress {
-  position: fixed;
+.process-button::before {
+  content: "";
+  position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  transition: left 0.6s ease;
+}
+
+.process-button:hover:not(:disabled)::before {
+  left: 100%;
+}
+
+.process-button:hover:not(:disabled) {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(0, 122, 255, 0.4);
+}
+
+.process-button:active:not(:disabled) {
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 0 4px 15px rgba(0, 122, 255, 0.3);
+}
+
+.process-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 对话框样式 */
+.create-library-dialog {
+  border-radius: var(--radius-xl);
+}
+
+.dialog-footer {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.progress-content {
-  background: white;
-  padding: 2rem;
-  border-radius: 16px;
-  text-align: center;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-}
-
-.progress-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f4f6;
-  border-top: 4px solid #007aff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 1rem;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* 成功提示 */
-.success-message {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.success-content {
-  background: white;
-  padding: 2rem;
-  border-radius: 16px;
-  text-align: center;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-}
-
-.success-icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-}
-
-.success-button {
-  background: #007aff;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  margin-top: 1rem;
-  transition: background-color 0.3s ease;
-}
-
-.success-button:hover {
-  background: #0056b3;
+  justify-content: flex-end;
+  gap: var(--space-md);
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .home {
-    padding: 0 0.5rem;
-  }
-
-  .hero {
-    padding: 1.2rem 0.5rem;
-    margin: -2rem 0 2rem 0;
-    width: 100%;
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
   .hero-content {
-    padding: 0;
+    grid-template-columns: 1fr;
+    gap: var(--space-xl);
+    text-align: center;
   }
 
   .hero-title {
-    font-size: 2.2rem;
+    font-size: 48px;
+    flex-direction: column;
+    gap: var(--space-sm);
   }
 
   .hero-subtitle {
-    font-size: 1.1rem;
-    padding: 0 1rem;
+    font-size: 20px;
   }
 
   .hero-features {
-    gap: 1rem;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .feature-tag {
-    padding: 0.6rem 1rem;
-    font-size: 0.9rem;
-  }
-
-  .floating-shape {
-    display: none;
-  }
-
-  .upload-area {
-    padding: 2rem 1rem;
-  }
-
-  .features-grid {
     grid-template-columns: 1fr;
-    gap: 1.5rem;
-    padding: 0 1rem;
-  }
-
-  .features-title {
-    font-size: 2rem;
-    padding: 0 1rem;
-  }
-
-  /* 移动端配置区域优化 */
-  .config-section {
-    padding: 2rem 1.5rem;
-    margin: 0 0 2rem 0;
   }
 
   .config-grid {
     grid-template-columns: 1fr;
-    gap: 2rem;
-    max-width: 100%;
   }
 
-  .config-title {
-    font-size: 1.25rem;
+  .section-title {
+    font-size: 36px;
   }
 
-  .config-select :deep(.el-input__wrapper) {
-    padding: 0.875rem 1rem;
-    font-size: 0.95rem;
-    padding-right: 2.5rem;
+  .section-subtitle {
+    font-size: 18px;
   }
 }
 
-/* 平板端优化 */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .home {
-    padding: 0 1.5rem;
+@media (max-width: 480px) {
+  .hero-container,
+  .section-container {
+    padding: 0 var(--space-md);
   }
 
-  .hero {
-    padding: 1.5rem 1.5rem;
-    margin: -2rem 0 2rem 0;
-    width: 100%;
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
+  .hero-title {
+    font-size: 36px;
   }
 
-  .hero-content {
-    padding: 0;
+  .hero-subtitle {
+    font-size: 18px;
   }
 
-  .config-section {
-    padding: 2.5rem;
-    margin: 0 0 2rem 0;
+  .section-title {
+    font-size: 28px;
   }
 
-  .config-grid {
-    gap: 2.5rem;
+  .upload-content {
+    padding: var(--space-xl);
   }
 
-  .features-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 2rem;
-  }
-}
-
-/* 大屏幕优化 */
-@media (min-width: 1025px) {
-  .home {
-    padding: 0 2rem;
+  .upload-title {
+    font-size: 18px;
   }
 
-  .hero {
-    padding: 1.5rem 2rem;
-    margin: -2rem 0 2rem 0;
-    width: 100%;
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .hero-content {
-    padding: 0;
-  }
-
-  .config-section {
-    padding: 3rem;
-    margin: 0 0 2rem 0;
-  }
-
-  .config-grid {
-    gap: 3rem;
-  }
-
-  .features-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 2.5rem;
-  }
-}
-
-/* 超大屏幕优化 */
-@media (min-width: 1400px) {
-  .home {
-    max-width: 1400px;
-    padding: 0 3rem;
-  }
-
-  .hero {
-    padding: 1.5rem 3rem;
-    margin: -2rem 0 2rem 0;
-    width: 100%;
-    max-width: 1400px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .hero-content {
-    padding: 0;
-  }
-
-  .config-section {
-    padding: 4rem;
-  }
-
-  .features-grid {
-    gap: 3rem;
+  .upload-subtitle {
+    font-size: 14px;
   }
 }
 </style>
