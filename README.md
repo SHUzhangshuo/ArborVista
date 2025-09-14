@@ -117,7 +117,10 @@ echo "MINERU_API_TOKEN=your_token_here" > .env
 **🚀 一键启动（推荐）**
 ```bash
 # Windows
-start.bat
+start.bat # 第一次需要运行两次，前端需要安装依赖
+# 前端报错使用下面的语句修复
+cd arborvistavue
+npm run lint -- --fix
 
 # Linux/Mac
 ./start.sh
