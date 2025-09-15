@@ -1012,6 +1012,38 @@ def register_routes(app):
                         except Exception as e:
                             print(f"读取文件信息失败: {e}")
                             continue
+                    else:
+                        # 没有filename_info.json文件，使用fallback逻辑
+                        print(f"目录 {file_dir.name} 没有filename_info.json，使用fallback逻辑")
+                        
+                        # 从目录名推断原始文件名
+                        original_filename = file_dir.name
+                        if '.pdf-' in file_dir.name:
+                            # 格式如: 2503.08726v1.pdf-485102e2-86ed-41db-88b2-739c99519177
+                            # 提取PDF文件名部分
+                            original_filename = file_dir.name.split('.pdf-')[0] + '.pdf'
+                        
+                        # 检查是否有full.md文件来确定处理状态
+                        full_md_file = actual_file_dir / 'full.md'
+                        status = 'processed' if full_md_file.exists() else 'processing'
+                        
+                        # 获取文件大小（如果有origin PDF文件）
+                        file_size = 0
+                        for file in actual_file_dir.iterdir():
+                            if file.is_file() and file.name.endswith('_origin.pdf'):
+                                file_size = file.stat().st_size
+                                break
+                        
+                        files.append({
+                            'id': file_dir.name,
+                            'name': original_filename,
+                            'created_at': datetime.now().isoformat(),  # 使用当前时间作为fallback
+                            'size': file_size,
+                            'status': status,
+                            'is_ocr': True,
+                            'enable_formula': False
+                        })
+                        print(f"添加文件(fallback): {original_filename}")
             
             print(f"找到 {len(files)} 个文件")
             # 按上传时间排序
