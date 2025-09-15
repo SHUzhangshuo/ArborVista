@@ -1,7 +1,11 @@
 <template>
-  <div class="document-viewer" v-if="visible">
+  <div
+    class="document-viewer"
+    :class="{ fullscreen: isFullscreen }"
+    v-if="visible"
+  >
     <!-- 顶部工具栏 -->
-    <div class="viewer-header">
+    <div class="viewer-header" v-show="!isFullscreen">
       <div class="header-left">
         <el-button @click="closeViewer" circle size="large" class="close-btn">
           <el-icon><Close /></el-icon>
@@ -87,7 +91,7 @@
     </div>
 
     <!-- 底部工具栏 -->
-    <div class="viewer-footer">
+    <div class="viewer-footer" v-show="!isFullscreen">
       <div class="footer-left">
         <el-button @click="scrollToTop" size="small">
           <el-icon><Top /></el-icon>
@@ -174,6 +178,7 @@ export default {
     return {
       zoomLevel: 1,
       isReadingMode: false,
+      isFullscreen: false,
       scrollProgress: 0,
       currentPage: 1,
       totalPages: 1,
@@ -212,9 +217,11 @@ export default {
   },
   mounted() {
     this.initMarkdownRenderer();
+    this.addFullscreenListeners();
   },
   beforeUnmount() {
     this.removeScrollListener();
+    this.removeFullscreenListeners();
     // 确保清理body类
     document.body.classList.remove("document-viewer-active");
   },
@@ -361,9 +368,23 @@ export default {
     // 切换全屏
     toggleFullscreen() {
       if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen();
+        document.documentElement
+          .requestFullscreen()
+          .then(() => {
+            this.isFullscreen = true;
+          })
+          .catch((err) => {
+            console.error("进入全屏失败:", err);
+          });
       } else {
-        document.exitFullscreen();
+        document
+          .exitFullscreen()
+          .then(() => {
+            this.isFullscreen = false;
+          })
+          .catch((err) => {
+            console.error("退出全屏失败:", err);
+          });
       }
     },
 
@@ -413,6 +434,52 @@ export default {
         hour: "2-digit",
         minute: "2-digit",
       });
+    },
+
+    // 添加全屏状态监听器
+    addFullscreenListeners() {
+      this.handleFullscreenChange = () => {
+        this.isFullscreen = !!document.fullscreenElement;
+      };
+
+      document.addEventListener(
+        "fullscreenchange",
+        this.handleFullscreenChange
+      );
+      document.addEventListener(
+        "webkitfullscreenchange",
+        this.handleFullscreenChange
+      );
+      document.addEventListener(
+        "mozfullscreenchange",
+        this.handleFullscreenChange
+      );
+      document.addEventListener(
+        "MSFullscreenChange",
+        this.handleFullscreenChange
+      );
+    },
+
+    // 移除全屏状态监听器
+    removeFullscreenListeners() {
+      if (this.handleFullscreenChange) {
+        document.removeEventListener(
+          "fullscreenchange",
+          this.handleFullscreenChange
+        );
+        document.removeEventListener(
+          "webkitfullscreenchange",
+          this.handleFullscreenChange
+        );
+        document.removeEventListener(
+          "mozfullscreenchange",
+          this.handleFullscreenChange
+        );
+        document.removeEventListener(
+          "MSFullscreenChange",
+          this.handleFullscreenChange
+        );
+      }
     },
   },
 };
@@ -526,6 +593,12 @@ export default {
   overflow: auto;
   padding: var(--space-xl);
   background: var(--bg-primary);
+}
+
+/* 全屏时的内容区域样式 */
+.document-viewer.fullscreen .viewer-content {
+  padding: var(--space-md);
+  height: 100vh;
 }
 
 .document-content {
