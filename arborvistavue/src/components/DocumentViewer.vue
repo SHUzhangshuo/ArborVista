@@ -72,12 +72,42 @@
           <el-skeleton :rows="15" animated />
         </div>
 
-        <!-- 文档内容 -->
+        <!-- 文档内容 - 小文件直接渲染 -->
         <div
-          v-else-if="documentContent"
+          v-else-if="documentContent && !isLargeDocument"
           class="markdown-content"
           v-html="renderedContent"
         ></div>
+
+        <!-- 文档内容 - 大文件分块渲染 -->
+        <div
+          v-else-if="documentContent && isLargeDocument"
+          class="markdown-content large-document-container"
+        >
+          <div v-if="isChunking" class="chunking-hint">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            <span>正在处理大文件...</span>
+          </div>
+          <div
+            v-else
+            class="chunks-wrapper"
+            :style="{ height: totalContentHeight + 'px' }"
+          >
+            <div
+              v-for="chunkIndex in Array.from(visibleChunks)"
+              :key="chunkIndex"
+              :data-chunk-index="chunkIndex"
+              class="chunk-item"
+              :style="{
+                position: 'absolute',
+                top: getChunkTop(chunkIndex) + 'px',
+                left: 0,
+                right: 0,
+              }"
+              v-html="renderedChunks[chunkIndex]"
+            ></div>
+          </div>
+        </div>
 
         <!-- 空状态 -->
         <div v-else class="empty-content">
@@ -128,6 +158,7 @@ import {
   Top,
   Reading,
   Document,
+  Loading,
 } from "@element-plus/icons-vue";
 import MarkdownIt from "markdown-it";
 import markdownItMathjax3 from "markdown-it-mathjax3";
@@ -143,6 +174,7 @@ export default {
     Top,
     Reading,
     Document,
+    Loading,
   },
   props: {
     visible: {
@@ -183,14 +215,64 @@ export default {
       currentPage: 1,
       totalPages: 1,
       md: null,
+      // 虚拟滚动相关
+      chunkSize: 200, // 每块渲染的行数
+      visibleChunks: new Set(), // 当前可见的块
+      renderedChunks: {}, // 已渲染的块缓存
+      contentChunks: [], // 分块后的原始内容
+      isChunking: false, // 是否正在分块
+      scrollTimer: null, // 滚动防抖计时器
+      chunkHeights: [], // 每个块的高度
+      chunkTops: [], // 每个块的top位置（累积高度）
+      avgLineHeight: 24, // 平均行高（用于估算）
     };
   },
   computed: {
+    // 判断是否是大文件（超过3000行）
+    isLargeDocument() {
+      if (!this.documentContent) return false;
+      const lines = this.documentContent.split("\n").length;
+      return lines > 3000;
+    },
+
+    // 渲染内容 - 对于小文件直接渲染，大文件使用分块
     renderedContent() {
       if (!this.documentContent || !this.md) {
         return "";
       }
-      return this.md.render(this.documentContent);
+
+      // 小文件直接渲染
+      if (!this.isLargeDocument) {
+        return this.md.render(this.documentContent);
+      }
+
+      // 大文件返回空，使用分块渲染
+      return "";
+    },
+
+    // 获取可见块的渲染内容（已废弃，改用chunk-item方式）
+    visibleRenderedContent() {
+      if (!this.isLargeDocument) return "";
+
+      let html = "";
+      const sortedChunks = Array.from(this.visibleChunks).sort((a, b) => a - b);
+
+      for (const chunkIndex of sortedChunks) {
+        if (this.renderedChunks[chunkIndex]) {
+          html += this.renderedChunks[chunkIndex];
+        }
+      }
+
+      return html;
+    },
+
+    // 计算总内容高度
+    totalContentHeight() {
+      if (this.chunkTops.length === 0 || this.chunkHeights.length === 0) {
+        return 0;
+      }
+      const lastIndex = this.chunkHeights.length - 1;
+      return this.chunkTops[lastIndex] + this.chunkHeights[lastIndex];
     },
   },
   watch: {
@@ -205,13 +287,34 @@ export default {
         document.body.classList.remove("document-viewer-active");
       }
     },
+    documentContent(newVal) {
+      if (newVal && this.isLargeDocument) {
+        // 大文件需要分块处理
+        this.prepareChunkedContent();
+      }
+    },
     renderedContent() {
+      // 小文件直接渲染的处理
       this.$nextTick(() => {
         this.setupImageHandlers();
         this.updatePageInfo();
-        if (window.MathJax && window.MathJax.typesetPromise) {
-          window.MathJax.typesetPromise();
+        // 小文件直接对整个文档进行MathJax渲染
+        if (
+          !this.isLargeDocument &&
+          window.MathJax &&
+          window.MathJax.typesetPromise
+        ) {
+          window.MathJax.typesetPromise().catch((err) => {
+            console.warn("MathJax渲染失败:", err);
+          });
         }
+      });
+    },
+    visibleRenderedContent() {
+      // 大文件分块渲染后的处理（已废弃，改为在renderChunk后调用）
+      this.$nextTick(() => {
+        this.setupImageHandlers();
+        this.updatePageInfo();
       });
     },
   },
@@ -254,6 +357,327 @@ export default {
       });
     },
 
+    // 准备分块内容
+    async prepareChunkedContent() {
+      if (!this.documentContent || this.isChunking) return;
+
+      this.isChunking = true;
+      this.contentChunks = [];
+      this.renderedChunks = {};
+      this.visibleChunks = new Set();
+      this.chunkHeights = [];
+      this.chunkTops = [];
+
+      try {
+        // 按行分割内容
+        const lines = this.documentContent.split("\n");
+
+        // 智能分块：避免切断数学公式和代码块
+        this.smartChunking(lines);
+
+        // 预渲染前5块（首屏内容）
+        await this.renderInitialChunks();
+      } catch (error) {
+        console.error("分块处理失败:", error);
+      } finally {
+        this.isChunking = false;
+      }
+    },
+
+    // 智能分块：避免切断数学公式、代码块
+    smartChunking(lines) {
+      let currentChunk = [];
+      let cumulativeTop = 0;
+      let inCodeBlock = false;
+      let inMathBlock = false;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        // 检测代码块边界
+        if (line.trim().startsWith("```")) {
+          inCodeBlock = !inCodeBlock;
+        }
+
+        // 检测块级数学公式边界
+        if (
+          line.trim() === "$$" ||
+          line.trim().startsWith("\\[") ||
+          line.trim().startsWith("\\]")
+        ) {
+          inMathBlock = !inMathBlock;
+        }
+
+        // 检测行内是否有未闭合的数学公式
+        const hasUnclosedInlineMath = this.hasUnclosedMath(line);
+
+        currentChunk.push(line);
+
+        // 判断是否可以切分
+        const canSplit =
+          currentChunk.length >= this.chunkSize &&
+          !inCodeBlock &&
+          !inMathBlock &&
+          !hasUnclosedInlineMath &&
+          line.trim() !== "" && // 不在空行切分
+          !line.trim().startsWith("#") && // 不在标题行切分
+          !line.trim().endsWith("\\"); // 不在行尾有续行符时切分
+
+        if (canSplit || i === lines.length - 1) {
+          // 保存当前块
+          const chunkContent = currentChunk.join("\n");
+          this.contentChunks.push(chunkContent);
+
+          // 预估块高度
+          const lineCount = currentChunk.length;
+          const estimatedHeight = lineCount * this.avgLineHeight;
+          this.chunkHeights.push(estimatedHeight);
+          this.chunkTops.push(cumulativeTop);
+          cumulativeTop += estimatedHeight;
+
+          // 重置当前块
+          currentChunk = [];
+        }
+      }
+
+      // 处理最后可能剩余的内容
+      if (currentChunk.length > 0) {
+        const chunkContent = currentChunk.join("\n");
+        this.contentChunks.push(chunkContent);
+
+        const lineCount = currentChunk.length;
+        const estimatedHeight = lineCount * this.avgLineHeight;
+        this.chunkHeights.push(estimatedHeight);
+        this.chunkTops.push(cumulativeTop);
+      }
+    },
+
+    // 检测行内是否有未闭合的数学公式
+    hasUnclosedMath(line) {
+      // 检测 $...$ 形式的行内公式
+      let dollarCount = 0;
+      let escaped = false;
+
+      for (let i = 0; i < line.length; i++) {
+        if (line[i] === "\\" && !escaped) {
+          escaped = true;
+          continue;
+        }
+
+        if (line[i] === "$" && !escaped) {
+          dollarCount++;
+        }
+
+        escaped = false;
+      }
+
+      // 如果$数量为奇数，说明有未闭合的公式
+      return dollarCount % 2 !== 0;
+    },
+
+    // 渲染初始块
+    async renderInitialChunks() {
+      const initialChunksCount = Math.min(5, this.contentChunks.length);
+
+      for (let i = 0; i < initialChunksCount; i++) {
+        await this.renderChunk(i);
+        this.visibleChunks.add(i);
+      }
+
+      // 强制更新视图并测量实际高度
+      this.$forceUpdate();
+
+      // 延迟测量以确保DOM已渲染，并对新块进行MathJax渲染
+      await this.$nextTick();
+      setTimeout(() => {
+        this.measureRenderedChunks();
+        this.typesetVisibleChunks();
+      }, 100);
+    },
+
+    // 渲染单个块
+    async renderChunk(chunkIndex) {
+      if (
+        chunkIndex < 0 ||
+        chunkIndex >= this.contentChunks.length ||
+        this.renderedChunks[chunkIndex]
+      ) {
+        return;
+      }
+
+      return new Promise((resolve) => {
+        // 使用 requestIdleCallback 或 setTimeout 避免阻塞
+        const renderFn = () => {
+          try {
+            const chunkContent = this.contentChunks[chunkIndex];
+            this.renderedChunks[chunkIndex] = this.md.render(chunkContent);
+          } catch (error) {
+            console.error(`渲染块 ${chunkIndex} 失败:`, error);
+            this.renderedChunks[chunkIndex] = `<p>渲染失败</p>`;
+          }
+          resolve();
+        };
+
+        if (window.requestIdleCallback) {
+          window.requestIdleCallback(renderFn, { timeout: 100 });
+        } else {
+          setTimeout(renderFn, 0);
+        }
+      });
+    },
+
+    // 更新可见块
+    async updateVisibleChunks() {
+      if (
+        !this.isLargeDocument ||
+        this.isChunking ||
+        this.chunkTops.length === 0
+      )
+        return;
+
+      const contentRef = this.$refs.contentRef;
+      if (!contentRef) return;
+
+      const scrollTop = contentRef.scrollTop;
+      const viewportHeight = contentRef.clientHeight;
+      const viewportBottom = scrollTop + viewportHeight;
+
+      // 使用二分查找找到第一个可见块
+      let startChunk = 0;
+      for (let i = 0; i < this.chunkTops.length; i++) {
+        if (this.chunkTops[i] + this.chunkHeights[i] >= scrollTop) {
+          startChunk = Math.max(0, i - 1); // 预加载上1块
+          break;
+        }
+      }
+
+      // 找到最后一个可见块
+      let endChunk = this.contentChunks.length - 1;
+      for (let i = startChunk; i < this.chunkTops.length; i++) {
+        if (this.chunkTops[i] > viewportBottom) {
+          endChunk = Math.min(this.contentChunks.length - 1, i + 1); // 预加载下1块
+          break;
+        }
+      }
+
+      // 收集需要渲染的新块
+      const newVisibleChunks = new Set();
+      const chunksToRender = [];
+
+      for (let i = startChunk; i <= endChunk; i++) {
+        newVisibleChunks.add(i);
+        if (!this.renderedChunks[i]) {
+          chunksToRender.push(i);
+        }
+      }
+
+      // 更新可见块集合
+      this.visibleChunks = newVisibleChunks;
+
+      // 渲染新块
+      if (chunksToRender.length > 0) {
+        for (const chunkIndex of chunksToRender) {
+          await this.renderChunk(chunkIndex);
+        }
+        this.$forceUpdate();
+
+        // 渲染完成后测量新块的实际高度并进行MathJax渲染
+        await this.$nextTick();
+        setTimeout(() => {
+          this.measureRenderedChunks();
+          this.typesetVisibleChunks();
+        }, 50);
+      }
+    },
+
+    // 只对可见块进行MathJax渲染
+    typesetVisibleChunks() {
+      if (!window.MathJax || !window.MathJax.typesetPromise) return;
+
+      if (!this.$refs.contentRef) return;
+
+      // 获取所有可见的chunk元素
+      const chunkElements =
+        this.$refs.contentRef.querySelectorAll(".chunk-item");
+
+      if (chunkElements.length === 0) return;
+
+      // 只对这些元素进行MathJax渲染
+      window.MathJax.typesetPromise(Array.from(chunkElements)).catch((err) => {
+        console.warn("MathJax渲染失败:", err);
+      });
+    },
+
+    // 获取块的top位置
+    getChunkTop(chunkIndex) {
+      return this.chunkTops[chunkIndex] || 0;
+    },
+
+    // 测量已渲染块的实际高度
+    measureRenderedChunks() {
+      if (!this.$refs.contentRef) return;
+
+      const chunkElements =
+        this.$refs.contentRef.querySelectorAll(".chunk-item");
+      if (chunkElements.length === 0) return;
+
+      let heightChanged = false;
+      const measuredIndices = [];
+
+      chunkElements.forEach((element) => {
+        // 从data-chunk-index属性获取块索引
+        const chunkIndex = parseInt(element.dataset.chunkIndex);
+
+        if (
+          !isNaN(chunkIndex) &&
+          chunkIndex >= 0 &&
+          chunkIndex < this.chunkHeights.length
+        ) {
+          const actualHeight = element.offsetHeight;
+          const oldHeight = this.chunkHeights[chunkIndex];
+
+          // 如果高度有显著变化（超过5%），更新高度
+          if (
+            actualHeight > 0 &&
+            Math.abs(actualHeight - oldHeight) > oldHeight * 0.05
+          ) {
+            this.chunkHeights[chunkIndex] = actualHeight;
+            heightChanged = true;
+            measuredIndices.push(chunkIndex);
+          }
+        }
+      });
+
+      // 如果有高度变化，重新计算所有块的top位置
+      if (heightChanged) {
+        this.recalculateChunkTops();
+
+        // 调整平均行高以改进后续估算
+        if (measuredIndices.length > 0) {
+          let totalHeight = 0;
+          let totalLines = 0;
+          measuredIndices.forEach((idx) => {
+            totalHeight += this.chunkHeights[idx];
+            totalLines += this.contentChunks[idx].split("\n").length;
+          });
+          if (totalLines > 0) {
+            // 使用加权平均，保留一部分旧值
+            this.avgLineHeight =
+              this.avgLineHeight * 0.3 + (totalHeight / totalLines) * 0.7;
+          }
+        }
+      }
+    },
+
+    // 重新计算所有块的top位置
+    recalculateChunkTops() {
+      let cumulativeTop = 0;
+      for (let i = 0; i < this.chunkHeights.length; i++) {
+        this.chunkTops[i] = cumulativeTop;
+        cumulativeTop += this.chunkHeights[i];
+      }
+    },
+
     // 初始化查看器
     initViewer() {
       this.zoomLevel = 1;
@@ -293,12 +717,27 @@ export default {
       this.scrollListener = () => {
         this.updateScrollProgress();
         this.updatePageInfo();
+
+        // 大文件模式下更新可见块
+        if (this.isLargeDocument) {
+          // 使用防抖避免频繁调用
+          if (this.scrollTimer) {
+            clearTimeout(this.scrollTimer);
+          }
+          this.scrollTimer = setTimeout(() => {
+            this.updateVisibleChunks();
+          }, 100);
+        }
       };
       this.$refs.contentRef?.addEventListener("scroll", this.scrollListener);
     },
 
     // 移除滚动监听
     removeScrollListener() {
+      if (this.scrollTimer) {
+        clearTimeout(this.scrollTimer);
+        this.scrollTimer = null;
+      }
       if (this.scrollListener && this.$refs.contentRef) {
         this.$refs.contentRef.removeEventListener(
           "scroll",
@@ -609,6 +1048,37 @@ export default {
 
 .loading-container {
   padding: var(--space-2xl);
+}
+
+.chunking-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2xl);
+  gap: var(--space-md);
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.chunking-hint .el-icon {
+  font-size: 32px;
+  color: var(--primary-color);
+}
+
+/* 大文件分块渲染容器 */
+.large-document-container {
+  position: relative;
+}
+
+.chunks-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.chunk-item {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .empty-content {
