@@ -9,9 +9,9 @@
 [![Flask](https://img.shields.io/badge/Flask-3.x-red.svg?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-orange.svg?style=flat-square)](LICENSE)
 
-> 基于 MinerU API 的智能论文阅读助手，提供 PDF 文档解析、OCR 识别、表格提取等功能
+> 基于 MinerU API 的智能论文阅读助手，提供 PDF 文档解析、OCR 识别、表格提取、RAG 智能问答等功能
 
-[🚀 快速开始](#-快速开始) • [📖 使用指南](#-使用指南) • [🔧 开发指南](#-开发指南) • [❓ 常见问题](#-常见问题)
+[🚀 快速开始](#-快速开始) • [📖 使用指南](#-使用指南) • [🤖 RAG 智能问答](#-rag-智能问答) • [🔧 开发指南](#-开发指南) • [❓ 常见问题](#-常见问题)
 
 </div>
 
@@ -27,6 +27,7 @@
 | 🖼️ **图片处理** | 📊 **表格自动提取** | 📱 **响应式设计** |
 | ☁️ **云端处理** | 📝 **Markdown输出** | ⚡ **快速响应** |
 | 📚 **文档管理** | 🔧 **API集成** | 🎯 **直观操作** |
+| 🤖 **RAG智能问答** | 🧠 **向量检索** | 📝 **查询日志** |
 
 </div>
 
@@ -37,6 +38,8 @@
 - **🌍 多语言支持** - 支持中文、英文、韩文、日文等多种语言
 - **📊 结构化输出** - 生成清晰的Markdown格式文档
 - **☁️ 云端处理** - 基于MinerU API，无需本地复杂配置
+- **🤖 RAG智能问答** - 基于向量检索的文档问答系统，支持单篇论文和整个文档库查询
+- **📝 查询日志** - 自动记录所有RAG查询，便于追踪和分析
 - **📱 移动友好** - 响应式设计，支持各种设备访问
 
 ---
@@ -51,8 +54,8 @@
 |------|----------|------|
 | 🐍 **Python** | 3.10+ | 推荐使用conda管理环境 |
 | 🟢 **Node.js** | 16+ | 用于前端开发 |
-| 💾 **内存** | 4GB+ | 推荐8GB以上 |
-| 🌐 **网络** | 稳定 | 需要访问MinerU API |
+| 💾 **内存** | 4GB+ | 推荐8GB以上（RAG功能需要额外内存） |
+| 🌐 **网络** | 稳定 | 需要访问MinerU API和OpenAI API（RAG功能） |
 
 </div>
 
@@ -85,34 +88,131 @@ source arborvista/bin/activate
 # 安装Python依赖
 pip install -r requirements.txt
 
+# 注意：RAG功能需要额外的依赖，如果安装时间过长，可以手动安装：
+# pip install langchain langchain-openai langchain-community faiss-cpu sentence-transformers
+
 # 安装前端依赖
 cd arborvistavue
 npm install
 cd ..
 ```
 
-#### 3️⃣ 配置API Token
+#### 3️⃣ 配置环境变量
 
-**🔑 获取MinerU API Token**
-1. 访问 [MinerU官网](https://mineru.net) 注册账号
-2. 获取API Token
+**📝 方式一：使用 .env 文件（推荐）**
 
-**⚙️ 设置环境变量**
+1. 复制环境变量示例文件：
 ```bash
-# Windows PowerShell
-$env:MINERU_API_TOKEN="your_token_here"
-
-# Windows CMD
-set MINERU_API_TOKEN=your_token_here
+# Windows
+copy env.example .env
 
 # Linux/Mac
-export MINERU_API_TOKEN="your_token_here"
-
-# 或创建.env文件
-echo "MINERU_API_TOKEN=your_token_here" > .env
+cp env.example .env
 ```
 
-#### 4️⃣ 启动项目
+2. 编辑 `.env` 文件，填入实际值：
+```bash
+# MinerU API配置（必需）
+MINERU_API_TOKEN=your-mineru-api-token-here
+
+# RAG/LLM配置（RAG功能必需）
+OPENAI_API_KEY=your-openai-api-key-here
+OPENAI_BASE_URL=http://your-api-server-url/v1/
+OPENAI_MODEL=gpt-5
+OPENAI_TEMPERATURE=0.7
+
+# Flask配置（可选）
+SECRET_KEY=your-secret-key-here
+FLASK_ENV=development
+```
+
+**⚙️ 方式二：临时设置环境变量（当前终端会话）**
+
+**Windows PowerShell:**
+```powershell
+# MinerU API Token
+$env:MINERU_API_TOKEN="your_token_here"
+
+# RAG功能配置
+$env:OPENAI_API_KEY="your_openai_api_key_here"
+$env:OPENAI_BASE_URL="http://your-api-server-url/v1/"
+$env:OPENAI_MODEL="gpt-5"
+$env:OPENAI_TEMPERATURE="0.7"
+```
+
+**Windows CMD:**
+```cmd
+set MINERU_API_TOKEN=your_token_here
+set OPENAI_API_KEY=your_openai_api_key_here
+set OPENAI_BASE_URL=http://your-api-server-url/v1/
+set OPENAI_MODEL=gpt-5
+set OPENAI_TEMPERATURE=0.7
+```
+
+**Linux/Mac:**
+```bash
+export MINERU_API_TOKEN="your_token_here"
+export OPENAI_API_KEY="your_openai_api_key_here"
+export OPENAI_BASE_URL="http://your-api-server-url/v1/"
+export OPENAI_MODEL="gpt-5"
+export OPENAI_TEMPERATURE="0.7"
+```
+
+**🔧 方式三：永久设置环境变量（系统级）**
+
+**Windows:**
+1. 右键"此电脑" → 属性 → 高级系统设置
+2. 点击"环境变量"
+3. 在"用户变量"或"系统变量"中添加上述变量
+
+**Linux/Mac:**
+将上述 `export` 命令添加到 `~/.bashrc` 或 `~/.zshrc`：
+```bash
+echo 'export MINERU_API_TOKEN="your_token_here"' >> ~/.bashrc
+echo 'export OPENAI_API_KEY="your_openai_api_key_here"' >> ~/.bashrc
+echo 'export OPENAI_BASE_URL="http://your-api-server-url/v1/"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**📋 必需的环境变量说明**
+
+| 环境变量 | 说明 | 是否必需 | 获取方式 |
+|---------|------|---------|---------|
+| `MINERU_API_TOKEN` | MinerU API访问令牌 | ✅ 必需 | 访问 [MinerU官网](https://mineru.net) 注册获取 |
+| `OPENAI_API_KEY` | OpenAI API密钥 | ✅ RAG功能必需 | 访问 OpenAI 或你的API服务提供商获取 |
+| `OPENAI_BASE_URL` | LLM API基础URL | ✅ RAG功能必需 | 你的API服务地址，例如：`http://your-server/v1/` |
+| `OPENAI_MODEL` | 模型名称 | ⚪ 可选 | 默认：`gpt-5` |
+| `OPENAI_TEMPERATURE` | 模型温度参数 | ⚪ 可选 | 默认：`0.7`，范围：0.0-2.0 |
+| `SECRET_KEY` | Flask密钥 | ⚪ 可选 | 用于生产环境，建议使用随机字符串 |
+
+#### 4️⃣ 验证环境变量配置
+
+在启动前，建议验证环境变量是否正确配置：
+
+**使用 .env 文件（推荐方式）**
+```bash
+# 检查 .env 文件是否存在
+# Windows
+if exist .env (echo .env file exists) else (echo .env file not found)
+
+# Linux/Mac
+test -f .env && echo ".env file exists" || echo ".env file not found"
+```
+
+**验证环境变量**
+```bash
+# Windows PowerShell
+if ($env:MINERU_API_TOKEN) { echo "✅ MINERU_API_TOKEN is set" } else { echo "❌ MINERU_API_TOKEN is not set" }
+if ($env:OPENAI_API_KEY) { echo "✅ OPENAI_API_KEY is set" } else { echo "⚠️ OPENAI_API_KEY is not set (RAG功能需要)" }
+if ($env:OPENAI_BASE_URL) { echo "✅ OPENAI_BASE_URL is set" } else { echo "⚠️ OPENAI_BASE_URL is not set (RAG功能需要)" }
+
+# Linux/Mac
+[ -n "$MINERU_API_TOKEN" ] && echo "✅ MINERU_API_TOKEN is set" || echo "❌ MINERU_API_TOKEN is not set"
+[ -n "$OPENAI_API_KEY" ] && echo "✅ OPENAI_API_KEY is set" || echo "⚠️ OPENAI_API_KEY is not set (RAG功能需要)"
+[ -n "$OPENAI_BASE_URL" ] && echo "✅ OPENAI_BASE_URL is set" || echo "⚠️ OPENAI_BASE_URL is not set (RAG功能需要)"
+```
+
+#### 5️⃣ 启动项目
 
 **🚀 一键启动（推荐）**
 ```bash
@@ -191,8 +291,78 @@ graph LR
 | 🏠 **首页** | 文档上传和处理 | 拖拽上传、批量处理 |
 | 📚 **文档库** | 文档管理和查看 | 分类管理、搜索过滤 |
 | 👁️ **文档查看器** | 文档内容展示 | Markdown渲染、图片预览 |
+| 🤖 **AI问答** | RAG智能问答 | 单篇论文/整个文档库查询 |
 
 </div>
+
+---
+
+## 🤖 RAG 智能问答
+
+### 📋 功能说明
+
+ArborVista 集成了基于 LangChain 和 FAISS 的 RAG（检索增强生成）系统，支持对文档进行智能问答。
+
+### 🎯 主要特性
+
+- **📚 文档库管理** - 支持多个文档库，每个文档库独立管理
+- **🔍 向量检索** - 基于语义相似度的智能检索
+- **📄 单篇论文查询** - 针对特定论文进行问答
+- **📚 全文档库查询** - 跨论文检索和问答
+- **📝 查询日志** - 自动记录所有查询，保存到 `data/logs/{library_id}_query.log`
+
+### 🚀 使用流程
+
+#### 1️⃣ 构建向量数据库
+
+1. 进入文档库页面，选择要构建向量数据库的文档库
+2. 点击"构建向量数据库"按钮
+3. 系统会自动：
+   - 加载文档库中的所有论文
+   - 切分文档为小片段
+   - 生成向量嵌入
+   - 构建FAISS向量索引
+   - 保存到 `data/vectorDatabase/{library_id}_faiss/`
+
+#### 2️⃣ 开始问答
+
+在文档查看器中：
+1. 点击"AI问答"按钮
+2. 选择查询模式：
+   - **当前论文** - 仅查询当前打开的论文
+   - **整个文档库** - 查询整个文档库中的所有论文
+3. 输入问题，点击"提问"
+4. 系统会返回基于文档内容的答案和相关来源片段
+
+#### 3️⃣ 查看查询日志
+
+所有RAG查询都会自动记录到日志文件：
+- 位置：`data/logs/{library_id}_query.log`
+- 格式：包含时间戳、级别、文档库ID、问题、完整答案等信息
+- 日志轮转：单个文件最大10MB，保留30天，自动压缩
+
+### 📊 日志格式示例
+
+```
+2025-11-05 14:13:43.453 | INFO     | library_d8fd90da | 📝 RAG Query
+   📚 Library: library_d8fd90da
+   📄 File ID: ubicomp25_FarSight.pdf-33b9be5a-899a-484e-b182-d482b47ce26f
+   🔍 Scope: single_paper
+   ❓ Question: lora感知的局限性
+   💬 Answer:
+基于提供的文档，LoRa 感知主要存在以下局限性：
+- 带宽窄，分辨率受限
+- 硬件诱发的相位/频率漂移
+- 空间可分性弱（少天线）
+...
+```
+
+### ⚙️ 技术细节
+
+- **嵌入模型**: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
+- **向量数据库**: FAISS (Facebook AI Similarity Search)
+- **LLM**: OpenAI GPT（通过 `OPENAI_API_KEY` 配置）
+- **检索方式**: 语义相似度检索 + 元数据过滤
 
 ---
 
@@ -204,6 +374,10 @@ ArborVista/
 │   ├── 📄 app.py             # 主应用文件
 │   ├── 📄 config.py          # 配置文件
 │   └── 📄 mineru_api.py      # MinerU API客户端
+├── 📁 agent/                  # RAG智能问答系统
+│   ├── 📄 RAG.py             # RAG核心实现
+│   ├── 📄 download_model.py  # 模型下载脚本
+│   └── 📄 test_longchain.py  # LangChain测试
 ├── 📁 arborvistavue/         # 前端 Vue.js 应用
 │   ├── 📁 src/               # 源代码
 │   │   ├── 📁 components/    # 组件
@@ -214,7 +388,11 @@ ArborVista/
 │   └── 📄 package.json       # 前端依赖
 ├── 📁 data/                  # 数据目录
 │   ├── 📁 input/             # 输入文件
-│   └── 📁 output/            # 输出结果
+│   ├── 📁 output/            # 输出结果
+│   ├── 📁 vectorDatabase/    # 向量数据库存储
+│   │   └── 📁 models/        # 嵌入模型缓存
+│   └── 📁 logs/              # 查询日志
+│       └── 📄 {library_id}_query.log  # 各文档库的查询日志
 ├── 📄 requirements.txt       # Python 依赖
 ├── 📄 .gitignore             # Git忽略规则
 ├── 📄 env.example            # 环境变量示例
@@ -226,13 +404,17 @@ ArborVista/
 
 ## ⚙️ 配置说明
 
-### 🔧 API配置
+### 🔧 环境变量配置
 
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| `MINERU_API_TOKEN` | MinerU API访问令牌 | 必需 |
-| `API_BASE_URL` | API基础URL | MinerU官方API |
-| `TIMEOUT` | 处理超时时间 | 5分钟 |
+| 环境变量 | 说明 | 是否必需 | 默认值 |
+|---------|------|---------|--------|
+| `MINERU_API_TOKEN` | MinerU API访问令牌 | ✅ 必需 | 无 |
+| `OPENAI_API_KEY` | OpenAI API密钥（RAG功能） | ✅ RAG功能必需 | 无 |
+| `OPENAI_BASE_URL` | LLM API基础URL | ✅ RAG功能必需 | 无 |
+| `OPENAI_MODEL` | 模型名称 | ⚪ 可选 | `gpt-5` |
+| `OPENAI_TEMPERATURE` | 模型温度参数（0.0-2.0） | ⚪ 可选 | `0.7` |
+| `SECRET_KEY` | Flask应用密钥 | ⚪ 可选 | `dev-secret-key-change-in-production` |
+| `FLASK_ENV` | Flask环境模式 | ⚪ 可选 | `development` |
 
 ### 🎛️ 应用配置
 
@@ -241,6 +423,8 @@ ArborVista/
 | `MAX_FILE_SIZE` | 最大文件大小 | 100MB |
 | `SUPPORTED_FORMATS` | 支持格式 | PDF, PNG, JPG, JPEG |
 | `OUTPUT_FORMAT` | 输出格式 | Markdown + 图片 |
+| `LOGS_DIR` | 日志目录 | `data/logs` |
+| `VECTOR_DB_DIR` | 向量数据库目录 | `data/vectorDatabase` |
 
 ---
 
@@ -302,6 +486,38 @@ GET /api/files/{file_id}/content
 GET /api/files/{file_id}/images/{image_path}
 ```
 
+#### RAG查询（单篇论文）
+```http
+POST /api/libraries/{library_id}/files/{file_id}/rag
+Content-Type: application/json
+
+{
+  "question": "这篇论文的主要贡献是什么？",
+  "query_mode": "single_paper"
+}
+```
+
+#### RAG查询（整个文档库）
+```http
+POST /api/libraries/{library_id}/rag
+Content-Type: application/json
+
+{
+  "question": "哪些论文提到了transformer？",
+  "query_mode": "all_papers"
+}
+```
+
+#### 构建向量数据库
+```http
+POST /api/libraries/{library_id}/build_vector_store
+```
+
+#### 获取向量数据库状态
+```http
+GET /api/libraries/{library_id}/vector_store_status
+```
+
 ---
 
 ## ❓ 常见问题
@@ -311,12 +527,37 @@ GET /api/files/{file_id}/images/{image_path}
 
 **A**: 确保已正确设置环境变量
 
+**方式一：使用 .env 文件（推荐）**
 ```bash
-# 检查环境变量
-echo $MINERU_API_TOKEN
+# 1. 复制示例文件
+cp env.example .env
 
-# 设置环境变量
+# 2. 编辑 .env 文件，填入实际的 MINERU_API_TOKEN
+# MINERU_API_TOKEN=your-actual-token-here
+```
+
+**方式二：临时设置（当前终端）**
+```bash
+# Windows PowerShell
+$env:MINERU_API_TOKEN="your_token_here"
+
+# Windows CMD
+set MINERU_API_TOKEN=your_token_here
+
+# Linux/Mac
 export MINERU_API_TOKEN="your_token_here"
+```
+
+**检查环境变量是否设置成功**
+```bash
+# Windows PowerShell
+echo $env:MINERU_API_TOKEN
+
+# Windows CMD
+echo %MINERU_API_TOKEN%
+
+# Linux/Mac
+echo $MINERU_API_TOKEN
 ```
 
 </details>
@@ -361,6 +602,114 @@ python app/app.py
 
 </details>
 
+<details>
+<summary><strong>Q: RAG功能无法使用</strong></summary>
+
+**A**: 检查以下配置
+
+**1. 检查必需的环境变量**
+```bash
+# Windows PowerShell
+echo $env:OPENAI_API_KEY
+echo $env:OPENAI_BASE_URL
+
+# Windows CMD
+echo %OPENAI_API_KEY%
+echo %OPENAI_BASE_URL%
+
+# Linux/Mac
+echo $OPENAI_API_KEY
+echo $OPENAI_BASE_URL
+```
+
+如果未设置，请配置：
+```bash
+# 方式一：使用 .env 文件（推荐）
+# 编辑 .env 文件，添加：
+OPENAI_API_KEY=your-api-key-here
+OPENAI_BASE_URL=http://your-api-server-url/v1/
+
+# 方式二：临时设置
+export OPENAI_API_KEY="your-api-key-here"
+export OPENAI_BASE_URL="http://your-api-server-url/v1/"
+```
+
+**2. 检查依赖安装**
+```bash
+# 手动安装RAG依赖
+pip install langchain langchain-openai langchain-community faiss-cpu sentence-transformers
+```
+
+**3. 检查向量数据库**
+- 确保已为文档库构建向量数据库
+- 查看日志文件了解详细错误信息：`data/logs/{library_id}_query.log`
+
+**4. 常见错误**
+- `OPENAI_API_KEY 未设置`：需要设置环境变量或配置 .env 文件
+- `OPENAI_BASE_URL 未设置`：需要设置 API 服务器地址
+- `向量数据库不存在`：需要先构建向量数据库
+
+</details>
+
+<details>
+<summary><strong>Q: 向量数据库构建失败</strong></summary>
+
+**A**: 可能的原因和解决方案
+- **内存不足**: 确保有足够的内存（推荐8GB+）
+- **模型下载失败**: 检查网络连接，或手动运行 `python agent/download_model.py`
+- **文档格式问题**: 确保文档已正确解析，包含有效文本内容
+
+</details>
+
+<details>
+<summary><strong>Q: 查询日志在哪里查看？</strong></summary>
+
+**A**: 查询日志自动保存到 `data/logs/` 目录
+- 每个文档库有独立的日志文件：`{library_id}_query.log`
+- 日志包含时间戳、问题、完整答案等信息
+- 日志文件自动轮转（最大10MB），保留30天
+
+</details>
+
+<details>
+<summary><strong>Q: 如何正确配置 .env 文件？</strong></summary>
+
+**A**: 按照以下步骤配置：
+
+**1. 创建 .env 文件**
+```bash
+# 复制示例文件
+cp env.example .env
+```
+
+**2. 编辑 .env 文件**
+使用文本编辑器打开 `.env` 文件，填入实际值：
+```bash
+# 必需配置
+MINERU_API_TOKEN=your-actual-mineru-token-here
+OPENAI_API_KEY=your-actual-openai-key-here
+OPENAI_BASE_URL=http://your-actual-api-server/v1/
+
+# 可选配置（有默认值）
+OPENAI_MODEL=gpt-5
+OPENAI_TEMPERATURE=0.7
+SECRET_KEY=your-secret-key-here
+```
+
+**3. 验证配置**
+```bash
+# 确保 .env 文件在项目根目录
+# 确保 .env 文件已添加到 .gitignore（不会提交到 Git）
+```
+
+**4. 注意事项**
+- ⚠️ **不要**将 `.env` 文件提交到 Git（已在 .gitignore 中）
+- ✅ 使用 `env.example` 作为模板
+- ✅ 每个环境（开发/生产）使用不同的 `.env` 文件
+- ✅ 定期更新 API Token，避免过期
+
+</details>
+
 ---
 
 ## 📊 性能优化
@@ -399,6 +748,10 @@ python app/app.py
 - [Vue.js](https://vuejs.org/) - 前端框架
 - [Flask](https://flask.palletsprojects.com/) - 后端框架
 - [Element Plus](https://element-plus.org/) - UI组件库
+- [LangChain](https://www.langchain.com/) - RAG框架
+- [FAISS](https://github.com/facebookresearch/faiss) - 向量相似度搜索
+- [Sentence Transformers](https://www.sbert.net/) - 文本嵌入模型
+- [Loguru](https://github.com/Delgan/loguru) - 日志库
 
 ---
 

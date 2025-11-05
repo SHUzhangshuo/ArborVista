@@ -2,3 +2,11 @@ Flask==3.0.0
 Flask-CORS==4.0.0
 requests==2.31.0
 pathlib2==2.3.7
+loguru==0.7.2
+
+# RAG检索相关依赖（如果时间太长手动下载下面库）
+langchain>=0.1.0
+langchain-openai>=0.0.2
+langchain-community>=0.0.10
+faiss-cpu>=1.7.4
+sentence-transformers>=2.2.2

@@ -9,6 +9,7 @@ class Config:
     DATA_DIR = BASE_DIR / "data"
     INPUT_DIR = DATA_DIR / "input"
     OUTPUT_DIR = DATA_DIR / "output"
+    LOGS_DIR = DATA_DIR / "logs"
     
     # Flask配置
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
@@ -25,6 +26,15 @@ class Config:
     # MinerU API配置
     MINERU_API_TOKEN = os.environ.get('MINERU_API_TOKEN')
     
+    # RAG/LLM配置
+    OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+    OPENAI_BASE_URL = os.environ.get('OPENAI_BASE_URL', '')
+    OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-5')
+    OPENAI_TEMPERATURE = float(os.environ.get('OPENAI_TEMPERATURE', '0.7'))
+    
+    # 向量数据库配置
+    VECTOR_DB_DIR = DATA_DIR / "vectorDatabase"
+    
     # 应用信息
     APP_NAME = "览树"
     APP_VERSION = "1.0.0"
@@ -36,6 +46,7 @@ class Config:
         # 确保必要的目录存在
         cls.INPUT_DIR.mkdir(exist_ok=True)
         cls.OUTPUT_DIR.mkdir(exist_ok=True)
+        cls.LOGS_DIR.mkdir(exist_ok=True)
         
         # 设置Flask配置
         app.config['SECRET_KEY'] = cls.SECRET_KEY
@@ -47,6 +58,13 @@ class Config:
             print("   请在环境变量中设置 MINERU_API_TOKEN")
         else:
             print("✅ MinerU API Token 已配置")
+        
+        # 检查OpenAI API配置（RAG功能）
+        if not cls.OPENAI_API_KEY:
+            print("⚠️ 警告: OPENAI_API_KEY 环境变量未设置")
+            print("   RAG功能需要OPENAI_API_KEY，请在环境变量中设置")
+        else:
+            print("✅ OpenAI API Key 已配置")
         
         return cls
 

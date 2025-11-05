@@ -65,8 +65,12 @@ coverage/
 # Data directories (keep structure but ignore content)
 data/input/*
 data/output/*
+data/logs/*
+data/vectorDatabase/*
 !data/input/.gitkeep
 !data/output/.gitkeep
+!data/logs/.gitkeep
+!data/vectorDatabase/.gitkeep
 
 # Logs
 *.log
