@@ -5,8 +5,19 @@ pathlib2==2.3.7
 loguru==0.7.2
 
 # RAG检索相关依赖（如果时间太长手动下载下面库）
-langchain>=0.1.0
-langchain-openai>=0.0.2
-langchain-community>=0.0.10
-faiss-cpu>=1.7.4
-sentence-transformers>=2.2.2
+langchain==0.3.27
+langchain-openai==0.2.9
+langchain-community==0.3.15
+
+# faiss-cpu==1.12.0
+# sentence-transformers=5.1.2
+# 注意：faiss-gpu 在 Python 3.13 下不可用（conda-forge 最高支持 Python 3.12）
+# 如果使用 Python 3.12 或更低版本，可以使用 conda 安装 GPU 版本：
+#   conda install -c conda-forge faiss-gpu
+# 对于 Python 3.13，请使用 CPU 版本（功能相同，只是没有 GPU 加速）
+# sentence-transformers 本身没有单独的 GPU 版本，它通过 PyTorch 使用 GPU
+# 如果需要 GPU 加速，请安装支持 CUDA 的 PyTorch：
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# 如果只使用 CPU，安装 CPU 版本的 PyTorch（会自动安装）：
+
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128

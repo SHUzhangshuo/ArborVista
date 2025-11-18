@@ -110,11 +110,23 @@ class PaperRAGSystem:
             from sentence_transformers import SentenceTransformer
             
             # Pre-load model to ensure proper loading and avoid meta tensor issues
+            # Auto-detect GPU if available
+            try:
+                import torch
+                device = 'cuda' if torch.cuda.is_available() else 'cpu'
+                if device == 'cuda':
+                    print(f"✅ 检测到 GPU，使用 CUDA 加速: {torch.cuda.get_device_name(0)}")
+                else:
+                    print("ℹ️  未检测到 GPU，使用 CPU")
+            except ImportError:
+                device = 'cpu'
+                print("ℹ️  PyTorch 未安装，使用 CPU")
+            
             try:
                 st_model = SentenceTransformer(
                     model_name,
                     cache_folder=str(model_cache_dir),
-                    device='cpu'
+                    device=device
                 )
                 _ = st_model.encode("test", normalize_embeddings=True)
             except Exception as e:
@@ -127,7 +139,7 @@ class PaperRAGSystem:
             try:
                 self.embeddings = HuggingFaceEmbeddings(
                     model_name=model_name,
-                    model_kwargs={'device': 'cpu'},
+                    model_kwargs={'device': device},
                     encode_kwargs={'normalize_embeddings': True}
                 )
                 test_embedding = self.embeddings.embed_query("test")

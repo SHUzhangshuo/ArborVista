@@ -43,9 +43,28 @@ def download_model(model_name: str = "sentence-transformers/paraphrase-multiling
         # 导入sentence-transformers
         try:
             from sentence_transformers import SentenceTransformer
-        except ImportError:
-            print("\n❌ 错误: 未安装 sentence-transformers")
-            print("   请运行: pip install sentence-transformers")
+        except ImportError as e:
+            error_msg = str(e)
+            print("\n❌ 错误: 无法导入 sentence-transformers")
+            
+            # 检查是否是 NumPy 相关错误
+            if "numpy" in error_msg.lower() or "_multiarray_umath" in error_msg.lower():
+                print("\n⚠️  检测到 NumPy DLL 加载失败，这通常是因为：")
+                print("   1. NumPy 安装不完整或损坏")
+                print("   2. 缺少 Visual C++ 运行库")
+                print("\n💡 解决方案：")
+                print("   1. 重新安装 NumPy: pip uninstall numpy -y && pip install numpy")
+                print("   2. 安装 Visual C++ Redistributable:")
+                print("      https://aka.ms/vs/17/release/vc_redist.x64.exe")
+                print("   3. 如果还不行，重新安装所有依赖:")
+                print("      pip uninstall numpy sentence-transformers -y")
+                print("      pip install numpy sentence-transformers")
+            else:
+                print("   请运行: pip install sentence-transformers")
+            
+            print(f"\n详细错误信息: {error_msg}")
+            import traceback
+            traceback.print_exc()
             return False
         
         # 下载并加载模型

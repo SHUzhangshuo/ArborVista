@@ -89,7 +89,7 @@ source arborvista/bin/activate
 pip install -r requirements.txt
 
 # 注意：RAG功能需要额外的依赖，如果安装时间过长，可以手动安装：
-# pip install langchain langchain-openai langchain-community faiss-cpu sentence-transformers
+# pip install langchain langchain-openai langchain-community faiss-gpu sentence-transformers
 
 # 安装前端依赖
 cd arborvistavue
@@ -637,7 +637,7 @@ export OPENAI_BASE_URL="http://your-api-server-url/v1/"
 **2. 检查依赖安装**
 ```bash
 # 手动安装RAG依赖
-pip install langchain langchain-openai langchain-community faiss-cpu sentence-transformers
+pip install langchain langchain-openai langchain-community faiss-gpu sentence-transformers
 ```
 
 **3. 检查向量数据库**

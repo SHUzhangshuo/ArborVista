@@ -516,6 +516,7 @@ export default {
       // 小文件直接渲染的处理
       this.$nextTick(() => {
         this.setupImageHandlers();
+        this.setupTableHandlers();
         this.updatePageInfo();
         // 小文件直接对整个文档进行MathJax渲染
         if (
@@ -523,9 +524,14 @@ export default {
           window.MathJax &&
           window.MathJax.typesetPromise
         ) {
-          window.MathJax.typesetPromise().catch((err) => {
-            console.warn("MathJax渲染失败:", err);
-          });
+          window.MathJax.typesetPromise()
+            .then(() => {
+              // MathJax渲染完成后，为公式添加交互功能
+              this.setupFormulaHandlers();
+            })
+            .catch((err) => {
+              console.warn("MathJax渲染失败:", err);
+            });
         }
       });
     },
@@ -533,6 +539,7 @@ export default {
       // 大文件分块渲染后的处理（已废弃，改为在renderChunk后调用）
       this.$nextTick(() => {
         this.setupImageHandlers();
+        this.setupTableHandlers();
         this.updatePageInfo();
       });
     },
@@ -806,6 +813,13 @@ export default {
           this.measureRenderedChunks();
           this.typesetVisibleChunks();
         }, 50);
+      } else {
+        // 即使没有新块需要渲染，也要检查是否有新的公式和表格需要设置处理器
+        // 因为 MathJax 可能在后续才完成渲染
+        setTimeout(() => {
+          this.setupFormulaHandlers();
+          this.setupTableHandlers();
+        }, 100);
       }
     },
 
@@ -822,9 +836,16 @@ export default {
       if (chunkElements.length === 0) return;
 
       // 只对这些元素进行MathJax渲染
-      window.MathJax.typesetPromise(Array.from(chunkElements)).catch((err) => {
-        console.warn("MathJax渲染失败:", err);
-      });
+      window.MathJax.typesetPromise(Array.from(chunkElements))
+        .then(() => {
+          // MathJax渲染完成后，为公式添加交互功能
+          this.setupFormulaHandlers();
+          // 同时设置表格处理器
+          this.setupTableHandlers();
+        })
+        .catch((err) => {
+          console.warn("MathJax渲染失败:", err);
+        });
     },
 
     // 获取块的top位置
@@ -924,6 +945,590 @@ export default {
           });
         });
       }
+    },
+
+    // 设置表格处理器（悬停效果和点击复制）
+    setupTableHandlers() {
+      if (!this.$refs.contentRef) return;
+
+      // 查找所有表格元素
+      const tables = this.$refs.contentRef.querySelectorAll(
+        ".markdown-content table:not(.table-clickable)"
+      );
+
+      tables.forEach((table) => {
+        // 标记已处理，避免重复添加
+        table.classList.add("table-clickable");
+
+        // 添加可点击样式
+        table.style.cursor = "pointer";
+        table.style.transition = "all 0.2s ease";
+
+        // 添加点击事件来复制表格
+        table.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.copyTableToClipboard(table);
+        });
+      });
+    },
+
+    // 设置公式处理器（悬停效果和点击复制）
+    setupFormulaHandlers() {
+      if (!this.$refs.contentRef) return;
+
+      // 首先，为所有 script 标签添加原始 Markdown 格式
+      this.attachOriginalMarkdownToFormulas();
+
+      // 查找所有 MathJax 渲染的公式元素
+      // MathJax 3 使用 mjx-container 类
+      const formulaElements = this.$refs.contentRef.querySelectorAll(
+        "mjx-container:not(.formula-clickable), .MathJax:not(.formula-clickable)"
+      );
+
+      formulaElements.forEach((element) => {
+        // 标记已处理，避免重复添加
+        element.classList.add("formula-clickable");
+
+        // 添加可点击样式
+        element.style.cursor = "pointer";
+        element.style.transition = "all 0.2s ease";
+
+        // 添加点击事件来复制公式
+        element.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.copyFormulaToClipboard(element);
+        });
+      });
+    },
+
+    // 为公式 script 标签附加原始 Markdown 格式
+    attachOriginalMarkdownToFormulas() {
+      if (!this.$refs.contentRef || !this.documentContent) return;
+
+      // 查找所有包含公式的 script 标签
+      const scriptElements = this.$refs.contentRef.querySelectorAll(
+        "script[type='math/tex'], script[type='math/tex; mode=display']"
+      );
+
+      scriptElements.forEach((scriptElement) => {
+        // 如果已经有原始 Markdown 数据，跳过
+        if (scriptElement.dataset.originalMarkdown) return;
+
+        const latexContent = (
+          scriptElement.textContent ||
+          scriptElement.innerText ||
+          ""
+        ).trim();
+        if (!latexContent) return;
+
+        const isDisplayMode = scriptElement.type === "math/tex; mode=display";
+
+        // 从原始文档内容中查找匹配的公式
+        let markdownFormula = "";
+
+        // 方法1: 尝试精确匹配 LaTeX 内容
+        // 清理 LaTeX 内容中的空白字符用于匹配
+        const normalizedLatex = latexContent.replace(/\s+/g, " ").trim();
+
+        if (isDisplayMode) {
+          // 块级公式：匹配 $$...$$ 或 \[...\]
+          // 使用更灵活的匹配，允许空白字符差异
+          const displayPatterns = [
+            // 匹配 $$...$$ 格式
+            new RegExp(
+              `\\$\\$[\\s\\S]*?${this.escapeRegex(
+                normalizedLatex
+              )}[\\s\\S]*?\\$\\$`,
+              "g"
+            ),
+            // 匹配 \[...\] 格式
+            new RegExp(
+              `\\\\\\[[\\s\\S]*?${this.escapeRegex(
+                normalizedLatex
+              )}[\\s\\S]*?\\\\\\]`,
+              "g"
+            ),
+          ];
+
+          for (const pattern of displayPatterns) {
+            const matches = this.documentContent.match(pattern);
+            if (matches && matches.length > 0) {
+              // 选择最接近的匹配（通常第一个就是）
+              markdownFormula = matches[0].trim();
+              break;
+            }
+          }
+
+          // 如果精确匹配失败，尝试匹配所有块级公式，然后通过内容相似度选择
+          if (!markdownFormula) {
+            const allDisplayFormulas = this.documentContent.match(
+              /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]/g
+            );
+            if (allDisplayFormulas) {
+              // 找到内容最相似的公式
+              for (const formula of allDisplayFormulas) {
+                const formulaContent = formula
+                  .replace(/^\$\$|^\$|^\$|\\\[|\\\]|\$\$$/g, "")
+                  .trim()
+                  .replace(/\s+/g, " ");
+                if (
+                  formulaContent.includes(normalizedLatex) ||
+                  normalizedLatex.includes(formulaContent)
+                ) {
+                  markdownFormula = formula.trim();
+                  break;
+                }
+              }
+            }
+          }
+        } else {
+          // 行内公式：匹配 $...$ 或 \(...\)
+          // 先找到所有可能的行内公式，然后过滤掉块级公式
+          const allInlineFormulas = this.documentContent.match(
+            /\$[^$\n]+?\$|\\\([^)]+?\\\)/g
+          );
+          if (allInlineFormulas) {
+            for (const formula of allInlineFormulas) {
+              // 排除块级公式（以 $$ 开头和结尾的）
+              if (formula.startsWith("$$") && formula.endsWith("$$")) continue;
+
+              const formulaContent = formula
+                .replace(/^\$|^\$|\\\(|\\\)|\$$/g, "")
+                .trim()
+                .replace(/\s+/g, " ");
+              if (
+                formulaContent.includes(normalizedLatex) ||
+                normalizedLatex.includes(formulaContent)
+              ) {
+                markdownFormula = formula.trim();
+                break;
+              }
+            }
+          }
+
+          // 如果还是没找到，尝试正则匹配
+          if (!markdownFormula) {
+            const inlinePatterns = [
+              // 匹配 \(...\) 格式
+              new RegExp(
+                `\\\\\\([^)]*?${this.escapeRegex(
+                  normalizedLatex
+                )}[^)]*?\\\\\\)`,
+                "g"
+              ),
+            ];
+
+            for (const pattern of inlinePatterns) {
+              const matches = this.documentContent.match(pattern);
+              if (matches && matches.length > 0) {
+                markdownFormula = matches[0].trim();
+                break;
+              }
+            }
+          }
+        }
+
+        // 如果还是找不到，使用 LaTeX 内容构造 Markdown 格式
+        if (!markdownFormula) {
+          markdownFormula = isDisplayMode
+            ? `$$${latexContent}$$`
+            : `$${latexContent}$`;
+        }
+
+        // 将原始 Markdown 格式存储到 data 属性
+        scriptElement.dataset.originalMarkdown = markdownFormula;
+      });
+    },
+
+    // 转义正则表达式特殊字符
+    escapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    },
+
+    // 复制公式到剪贴板（复制原始 Markdown 格式）
+    async copyFormulaToClipboard(formulaElement) {
+      try {
+        // 查找包含原始公式内容的 script 标签
+        let scriptElement = null;
+
+        // 方法1: 查找相邻的 script 标签
+        let sibling = formulaElement.previousElementSibling;
+        while (sibling && !scriptElement) {
+          if (
+            sibling.tagName === "SCRIPT" &&
+            (sibling.type === "math/tex" ||
+              sibling.type === "math/tex; mode=display")
+          ) {
+            scriptElement = sibling;
+            break;
+          }
+          sibling = sibling.previousElementSibling;
+        }
+
+        // 如果前一个兄弟节点没找到，查找后一个兄弟节点
+        if (!scriptElement) {
+          sibling = formulaElement.nextElementSibling;
+          while (sibling && !scriptElement) {
+            if (
+              sibling.tagName === "SCRIPT" &&
+              (sibling.type === "math/tex" ||
+                sibling.type === "math/tex; mode=display")
+            ) {
+              scriptElement = sibling;
+              break;
+            }
+            sibling = sibling.nextElementSibling;
+          }
+        }
+
+        // 方法2: 在元素内部查找 script 标签
+        if (!scriptElement && formulaElement.querySelector) {
+          scriptElement = formulaElement.querySelector(
+            "script[type='math/tex'], script[type='math/tex; mode=display']"
+          );
+        }
+
+        // 方法3: 从父元素查找
+        if (!scriptElement) {
+          let current = formulaElement.parentElement;
+          let depth = 0;
+          while (current && depth < 3 && !scriptElement) {
+            scriptElement = current.querySelector
+              ? current.querySelector(
+                  "script[type='math/tex'], script[type='math/tex; mode=display']"
+                )
+              : null;
+            if (scriptElement) break;
+            current = current.parentElement;
+            depth++;
+          }
+        }
+
+        // 获取原始 Markdown 格式
+        let markdownFormula = "";
+
+        if (scriptElement && scriptElement.dataset.originalMarkdown) {
+          // 优先使用已存储的原始 Markdown 格式
+          markdownFormula = scriptElement.dataset.originalMarkdown;
+        } else if (scriptElement) {
+          // 如果没有存储，尝试从原始文档中查找
+          const latexContent = (
+            scriptElement.textContent ||
+            scriptElement.innerText ||
+            ""
+          ).trim();
+          const isDisplayMode = scriptElement.type === "math/tex; mode=display";
+
+          if (latexContent && this.documentContent) {
+            // 尝试从原始文档中匹配
+            const escapedContent = latexContent.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              "\\$&"
+            );
+
+            if (isDisplayMode) {
+              const patterns = [
+                new RegExp(`\\$\\$\\s*${escapedContent}\\s*\\$\\$`, "g"),
+                new RegExp(`\\\\\\[\\s*${escapedContent}\\s*\\\\\\]`, "g"),
+              ];
+
+              for (const pattern of patterns) {
+                const matches = this.documentContent.match(pattern);
+                if (matches && matches.length > 0) {
+                  markdownFormula = matches[0].trim();
+                  break;
+                }
+              }
+            } else {
+              const patterns = [
+                new RegExp(`\\$\\s*${escapedContent}\\s*\\$`, "g"),
+                new RegExp(`\\\\\\(\\s*${escapedContent}\\s*\\\\\\)`, "g"),
+              ];
+
+              for (const pattern of patterns) {
+                const matches = this.documentContent.match(pattern);
+                if (matches && matches.length > 0) {
+                  markdownFormula = matches[0].trim();
+                  break;
+                }
+              }
+            }
+
+            // 如果还是找不到，构造 Markdown 格式
+            if (!markdownFormula) {
+              markdownFormula = isDisplayMode
+                ? `$$${latexContent}$$`
+                : `$${latexContent}$`;
+            }
+          }
+        } else {
+          // 如果找不到 script 标签，使用元素的文本内容作为后备
+          const formulaContent =
+            formulaElement.textContent || formulaElement.innerText || "";
+          const trimmedContent = formulaContent.trim().replace(/\s+/g, " ");
+          const isBlock =
+            formulaElement.closest("p") === null ||
+            formulaElement.parentElement?.tagName === "DIV";
+
+          if (trimmedContent) {
+            markdownFormula = isBlock
+              ? `$$${trimmedContent}$$`
+              : `$${trimmedContent}$`;
+          }
+        }
+
+        // 复制到剪贴板
+        if (markdownFormula) {
+          await navigator.clipboard.writeText(markdownFormula);
+          ElMessage.success({
+            message: "公式已复制到剪贴板（Markdown格式）",
+            duration: 2000,
+          });
+        } else {
+          ElMessage.warning({
+            message: "无法获取公式代码",
+            duration: 2000,
+          });
+        }
+      } catch (error) {
+        console.error("复制公式失败:", error);
+        // 降级方案：使用传统的复制方法
+        try {
+          const formulaContent =
+            formulaElement.textContent || formulaElement.innerText || "";
+          const trimmedContent = formulaContent.trim().replace(/\s+/g, " ");
+          const isBlock =
+            formulaElement.closest("p") === null ||
+            formulaElement.parentElement?.tagName === "DIV";
+          const markdownFormula = isBlock
+            ? `$$${trimmedContent}$$`
+            : `$${trimmedContent}$`;
+
+          const textArea = document.createElement("textarea");
+          textArea.value = markdownFormula;
+          textArea.style.position = "fixed";
+          textArea.style.opacity = "0";
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textArea);
+          ElMessage.success({
+            message: "公式已复制到剪贴板（Markdown格式）",
+            duration: 2000,
+          });
+        } catch (fallbackError) {
+          console.error("降级复制方案也失败:", fallbackError);
+          ElMessage.error({
+            message: "复制失败，请手动选择文本复制",
+            duration: 2000,
+          });
+        }
+      }
+    },
+
+    // 复制表格到剪贴板（复制为 Markdown 格式）
+    async copyTableToClipboard(tableElement) {
+      try {
+        // 将 HTML 表格转换为 Markdown 格式
+        const markdownTable = this.convertTableToMarkdown(tableElement);
+
+        if (markdownTable) {
+          await navigator.clipboard.writeText(markdownTable);
+          ElMessage.success({
+            message: "表格已复制到剪贴板（Markdown格式）",
+            duration: 2000,
+          });
+        } else {
+          ElMessage.warning({
+            message: "无法转换表格",
+            duration: 2000,
+          });
+        }
+      } catch (error) {
+        console.error("复制表格失败:", error);
+        // 降级方案：使用传统的复制方法
+        try {
+          const markdownTable = this.convertTableToMarkdown(tableElement);
+          const textArea = document.createElement("textarea");
+          textArea.value = markdownTable;
+          textArea.style.position = "fixed";
+          textArea.style.opacity = "0";
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textArea);
+          ElMessage.success({
+            message: "表格已复制到剪贴板（Markdown格式）",
+            duration: 2000,
+          });
+        } catch (fallbackError) {
+          console.error("降级复制方案也失败:", fallbackError);
+          ElMessage.error({
+            message: "复制失败，请手动选择文本复制",
+            duration: 2000,
+          });
+        }
+      }
+    },
+
+    // 将 HTML 表格转换为 Markdown 格式
+    convertTableToMarkdown(tableElement) {
+      const rows = [];
+      const thead = tableElement.querySelector("thead");
+      const tbody = tableElement.querySelector("tbody") || tableElement;
+
+      // 处理表头
+      if (thead) {
+        const headerRow = thead.querySelector("tr");
+        if (headerRow) {
+          const headerCells = Array.from(headerRow.querySelectorAll("th, td"));
+          const headerTexts = headerCells.map((cell) =>
+            this.getCellText(cell).trim()
+          );
+          rows.push(headerTexts);
+
+          // 添加分隔行
+          const separator = headerTexts.map(() => "---");
+          rows.push(separator);
+        }
+      }
+
+      // 处理表体
+      const bodyRows = tbody.querySelectorAll("tr");
+      bodyRows.forEach((row) => {
+        const cells = Array.from(row.querySelectorAll("td, th"));
+        const cellTexts = cells.map((cell) => this.getCellText(cell).trim());
+        if (cellTexts.length > 0) {
+          rows.push(cellTexts);
+        }
+      });
+
+      // 如果没有表头，使用第一行作为表头
+      if (!thead && rows.length > 0) {
+        const firstRow = rows[0];
+        const separator = firstRow.map(() => "---");
+        rows.splice(1, 0, separator);
+      }
+
+      // 转换为 Markdown 格式
+      return rows
+        .map((row) => {
+          // 确保所有行的列数一致（以第一行为准）
+          const maxCols = rows[0] ? rows[0].length : row.length;
+          const paddedRow = [...row];
+          while (paddedRow.length < maxCols) {
+            paddedRow.push("");
+          }
+          return "| " + paddedRow.join(" | ") + " |";
+        })
+        .join("\n");
+    },
+
+    // 获取单元格文本（处理嵌套元素和公式）
+    getCellText(cell) {
+      // 克隆单元格以避免修改原始 DOM
+      const clone = cell.cloneNode(true);
+
+      // 处理 MathJax 公式：尝试从 script 标签获取原始 LaTeX
+      const scripts = clone.querySelectorAll(
+        "script[type='math/tex'], script[type='math/tex; mode=display']"
+      );
+      scripts.forEach((script) => {
+        const latexContent = (
+          script.textContent ||
+          script.innerText ||
+          ""
+        ).trim();
+        if (latexContent) {
+          let markdownFormula = "";
+
+          // 方法1: 尝试从已存储的原始 Markdown 格式获取
+          if (script.dataset && script.dataset.originalMarkdown) {
+            markdownFormula = script.dataset.originalMarkdown;
+          }
+          // 方法2: 从原始文档中查找匹配的公式
+          else if (this.documentContent) {
+            const normalizedLatex = latexContent.replace(/\s+/g, " ").trim();
+            const isDisplayMode = script.type === "math/tex; mode=display";
+
+            if (isDisplayMode) {
+              const patterns = [
+                new RegExp(
+                  `\\$\\$[\\s\\S]*?${this.escapeRegex(
+                    normalizedLatex
+                  )}[\\s\\S]*?\\$\\$`,
+                  "g"
+                ),
+                new RegExp(
+                  `\\\\\\[[\\s\\S]*?${this.escapeRegex(
+                    normalizedLatex
+                  )}[\\s\\S]*?\\\\\\]`,
+                  "g"
+                ),
+              ];
+
+              for (const pattern of patterns) {
+                const matches = this.documentContent.match(pattern);
+                if (matches && matches.length > 0) {
+                  markdownFormula = matches[0].trim();
+                  break;
+                }
+              }
+            } else {
+              const allInlineFormulas = this.documentContent.match(
+                /\$[^$\n]+?\$|\\\([^)]+?\\\)/g
+              );
+              if (allInlineFormulas) {
+                for (const formula of allInlineFormulas) {
+                  if (formula.startsWith("$$") && formula.endsWith("$$"))
+                    continue;
+                  const formulaContent = formula
+                    .replace(/^\$|^\$|\\\(|\\\)|\$$/g, "")
+                    .trim()
+                    .replace(/\s+/g, " ");
+                  if (
+                    formulaContent.includes(normalizedLatex) ||
+                    normalizedLatex.includes(formulaContent)
+                  ) {
+                    markdownFormula = formula.trim();
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          // 如果还是找不到，使用 LaTeX 内容构造 Markdown 格式
+          if (!markdownFormula) {
+            const isDisplayMode = script.type === "math/tex; mode=display";
+            markdownFormula = isDisplayMode
+              ? `$$${latexContent}$$`
+              : `$${latexContent}$`;
+          }
+
+          // 替换 script 标签内容为 Markdown 格式
+          script.textContent = markdownFormula;
+        }
+      });
+
+      // 移除 script 标签，保留文本内容
+      const tempDiv = document.createElement("div");
+      tempDiv.appendChild(clone);
+      let text = tempDiv.innerHTML;
+
+      // 清理 HTML 标签，保留文本
+      text = text
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "") // 移除剩余的 script 标签
+        .replace(/<[^>]+>/g, "") // 移除所有 HTML 标签
+        .replace(/&nbsp;/g, " ") // 替换 &nbsp;
+        .replace(/&amp;/g, "&") // 替换 &amp;
+        .replace(/&lt;/g, "<") // 替换 &lt;
+        .replace(/&gt;/g, ">") // 替换 &gt;
+        .replace(/&quot;/g, '"') // 替换 &quot;
+        .replace(/&#39;/g, "'") // 替换 &#39;
+        .trim();
+
+      return text || "";
     },
 
     // 预览图片
@@ -1598,6 +2203,44 @@ export default {
   background: var(--bg-secondary);
 }
 
+/* 表格交互样式 */
+.markdown-content :deep(table.table-clickable) {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.markdown-content :deep(table.table-clickable:hover) {
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.3);
+  transform: scale(1.01);
+}
+
+.markdown-content :deep(table.table-clickable:active) {
+  transform: scale(0.99);
+}
+
+/* 为表格添加提示工具 */
+.markdown-content :deep(table.table-clickable::before) {
+  content: "点击复制表格";
+  position: absolute;
+  top: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 1000;
+}
+
+.markdown-content :deep(table.table-clickable:hover::before) {
+  opacity: 1;
+}
+
 .markdown-content :deep(code) {
   background: var(--bg-secondary);
   padding: 2px 6px;
@@ -1653,6 +2296,56 @@ export default {
 
 .markdown-content :deep(a:hover) {
   border-bottom-color: var(--primary-color);
+}
+
+/* 数学公式交互样式 */
+.markdown-content :deep(mjx-container.formula-clickable),
+.markdown-content :deep(.MathJax.formula-clickable) {
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: 0 2px;
+}
+
+.markdown-content :deep(mjx-container.formula-clickable:hover),
+.markdown-content :deep(.MathJax.formula-clickable:hover) {
+  background-color: rgba(64, 158, 255, 0.1);
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+  transform: scale(1.02);
+}
+
+.markdown-content :deep(mjx-container.formula-clickable:active),
+.markdown-content :deep(.MathJax.formula-clickable:active) {
+  transform: scale(0.98);
+  background-color: rgba(64, 158, 255, 0.15);
+}
+
+/* 为公式添加提示工具 */
+.markdown-content :deep(mjx-container.formula-clickable::after),
+.markdown-content :deep(.MathJax.formula-clickable::after) {
+  content: "点击复制";
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 1000;
+  margin-bottom: 4px;
+}
+
+.markdown-content :deep(mjx-container.formula-clickable:hover::after),
+.markdown-content :deep(.MathJax.formula-clickable:hover::after) {
+  opacity: 1;
 }
 
 /* 底部工具栏 */
