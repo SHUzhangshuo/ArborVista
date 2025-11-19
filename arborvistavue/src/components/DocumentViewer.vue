@@ -1001,143 +1001,243 @@ export default {
       });
     },
 
-    // 为公式 script 标签附加原始 Markdown 格式
+    // 为公式附加原始 Markdown 格式（按顺序直接对应，不匹配）
+    // 由于 MathJax 3 渲染后会移除 script 标签，我们需要在渲染前保存，渲染后转移到 mjx-container
     attachOriginalMarkdownToFormulas() {
       if (!this.$refs.contentRef || !this.documentContent) return;
 
-      // 查找所有包含公式的 script 标签
-      const scriptElements = this.$refs.contentRef.querySelectorAll(
-        "script[type='math/tex'], script[type='math/tex; mode=display']"
+      // 如果文档内容改变了，重置缓存和索引
+      if (this._cachedDocumentContent !== this.documentContent) {
+        this._cachedOriginalFormulas = null;
+        this._formulaIndex = undefined;
+        this._cachedDocumentContent = this.documentContent;
+      }
+
+      // 从原始文档中按顺序提取所有公式（原封不动）
+      const originalDisplayFormulas = [];
+      const originalInlineFormulas = [];
+
+      // 提取块级公式 $$...$$ 或 \[...\]
+      const displayMatches = this.documentContent.matchAll(
+        /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]/g
       );
+      for (const match of displayMatches) {
+        originalDisplayFormulas.push(match[0]);
+      }
 
-      scriptElements.forEach((scriptElement) => {
+      // 提取行内公式 $...$ 或 \(...\)（排除块级公式）
+      // 方法：先移除所有块级公式，再提取行内公式
+      let contentWithoutDisplay = this.documentContent;
+      // 用占位符替换块级公式
+      originalDisplayFormulas.forEach((formula, index) => {
+        const placeholder = `__DISPLAY_FORMULA_${index}__`;
+        contentWithoutDisplay = contentWithoutDisplay.replace(
+          formula,
+          placeholder
+        );
+      });
+
+      // 现在可以安全地提取行内公式 $...$（不会匹配到块级公式）
+      const inlineDollarMatches =
+        contentWithoutDisplay.matchAll(/\$[^$\n]+?\$/g);
+      for (const match of inlineDollarMatches) {
+        originalInlineFormulas.push(match[0]);
+      }
+
+      // 提取 \(...\)
+      const parenFormulas = contentWithoutDisplay.matchAll(/\\\([^)]+?\\\)/g);
+      for (const match of parenFormulas) {
+        originalInlineFormulas.push(match[0]);
+      }
+
+      // 如果还没有提取过原始公式，先提取并缓存
+      let displayFormulas, inlineFormulas;
+      if (!this._cachedOriginalFormulas) {
+        this._cachedOriginalFormulas = {
+          display: originalDisplayFormulas,
+          inline: originalInlineFormulas,
+        };
+        // 初始化全局索引
+        this._formulaIndex = { display: 0, inline: 0 };
+        displayFormulas = originalDisplayFormulas;
+        inlineFormulas = originalInlineFormulas;
+      } else {
+        // 使用缓存的公式
+        displayFormulas = this._cachedOriginalFormulas.display;
+        inlineFormulas = this._cachedOriginalFormulas.inline;
+      }
+
+      // MathJax 3 渲染后，script 标签会被移除，所以我们需要直接在 mjx-container 上存储原始 Markdown
+      // 只处理最外层的 mjx-container（没有 mjx-container 父元素的），避免嵌套容器干扰
+      const allMjxContainers = Array.from(
+        this.$refs.contentRef.querySelectorAll("mjx-container")
+      ).filter((mjxContainer) => {
+        // 只选择最外层的 mjx-container（父元素不是 mjx-container）
+        return !mjxContainer.parentElement?.closest("mjx-container");
+      });
+
+      // 按 DOM 顺序排序，确保顺序正确
+      allMjxContainers.sort((a, b) => {
+        const aRect = a.getBoundingClientRect();
+        const bRect = b.getBoundingClientRect();
+        if (Math.abs(aRect.top - bRect.top) > 10) {
+          return aRect.top - bRect.top;
+        }
+        return aRect.left - bRect.left;
+      });
+
+      allMjxContainers.forEach((mjxContainer) => {
         // 如果已经有原始 Markdown 数据，跳过
-        if (scriptElement.dataset.originalMarkdown) return;
+        if (mjxContainer.dataset.originalMarkdown) return;
 
-        const latexContent = (
-          scriptElement.textContent ||
-          scriptElement.innerText ||
-          ""
-        ).trim();
-        if (!latexContent) return;
+        // 判断是块级还是行内公式
+        // 块级公式：检查 display 属性、父元素类型、以及是否在段落内
+        const parent = mjxContainer.parentElement;
+        const isInParagraph = mjxContainer.closest("p") !== null;
+        const parentIsBlock =
+          parent &&
+          (parent.tagName === "DIV" ||
+            parent.tagName === "BLOCKQUOTE" ||
+            parent.style.display === "block");
+        const hasBlockDisplay =
+          mjxContainer.getAttribute("display") === "block" ||
+          mjxContainer.style.display === "block" ||
+          window.getComputedStyle(mjxContainer).display === "block";
 
-        const isDisplayMode = scriptElement.type === "math/tex; mode=display";
-
-        // 从原始文档内容中查找匹配的公式
-        let markdownFormula = "";
-
-        // 方法1: 尝试精确匹配 LaTeX 内容
-        // 清理 LaTeX 内容中的空白字符用于匹配
-        const normalizedLatex = latexContent.replace(/\s+/g, " ").trim();
+        // 块级公式的判断：不在段落内，或者有 block display，或者父元素是块级元素
+        const isDisplayMode =
+          hasBlockDisplay || (!isInParagraph && parentIsBlock);
 
         if (isDisplayMode) {
-          // 块级公式：匹配 $$...$$ 或 \[...\]
-          // 使用更灵活的匹配，允许空白字符差异
-          const displayPatterns = [
-            // 匹配 $$...$$ 格式
-            new RegExp(
-              `\\$\\$[\\s\\S]*?${this.escapeRegex(
-                normalizedLatex
-              )}[\\s\\S]*?\\$\\$`,
-              "g"
-            ),
-            // 匹配 \[...\] 格式
-            new RegExp(
-              `\\\\\\[[\\s\\S]*?${this.escapeRegex(
-                normalizedLatex
-              )}[\\s\\S]*?\\\\\\]`,
-              "g"
-            ),
-          ];
-
-          for (const pattern of displayPatterns) {
-            const matches = this.documentContent.match(pattern);
-            if (matches && matches.length > 0) {
-              // 选择最接近的匹配（通常第一个就是）
-              markdownFormula = matches[0].trim();
-              break;
-            }
-          }
-
-          // 如果精确匹配失败，尝试匹配所有块级公式，然后通过内容相似度选择
-          if (!markdownFormula) {
-            const allDisplayFormulas = this.documentContent.match(
-              /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]/g
-            );
-            if (allDisplayFormulas) {
-              // 找到内容最相似的公式
-              for (const formula of allDisplayFormulas) {
-                const formulaContent = formula
-                  .replace(/^\$\$|^\$|^\$|\\\[|\\\]|\$\$$/g, "")
-                  .trim()
-                  .replace(/\s+/g, " ");
-                if (
-                  formulaContent.includes(normalizedLatex) ||
-                  normalizedLatex.includes(formulaContent)
-                ) {
-                  markdownFormula = formula.trim();
-                  break;
-                }
-              }
-            }
+          // 块级公式：按全局顺序直接对应
+          if (this._formulaIndex.display < displayFormulas.length) {
+            mjxContainer.dataset.originalMarkdown =
+              displayFormulas[this._formulaIndex.display];
+            this._formulaIndex.display++;
           }
         } else {
-          // 行内公式：匹配 $...$ 或 \(...\)
-          // 先找到所有可能的行内公式，然后过滤掉块级公式
-          const allInlineFormulas = this.documentContent.match(
-            /\$[^$\n]+?\$|\\\([^)]+?\\\)/g
-          );
-          if (allInlineFormulas) {
-            for (const formula of allInlineFormulas) {
-              // 排除块级公式（以 $$ 开头和结尾的）
-              if (formula.startsWith("$$") && formula.endsWith("$$")) continue;
-
-              const formulaContent = formula
-                .replace(/^\$|^\$|\\\(|\\\)|\$$/g, "")
-                .trim()
-                .replace(/\s+/g, " ");
-              if (
-                formulaContent.includes(normalizedLatex) ||
-                normalizedLatex.includes(formulaContent)
-              ) {
-                markdownFormula = formula.trim();
-                break;
-              }
-            }
-          }
-
-          // 如果还是没找到，尝试正则匹配
-          if (!markdownFormula) {
-            const inlinePatterns = [
-              // 匹配 \(...\) 格式
-              new RegExp(
-                `\\\\\\([^)]*?${this.escapeRegex(
-                  normalizedLatex
-                )}[^)]*?\\\\\\)`,
-                "g"
-              ),
-            ];
-
-            for (const pattern of inlinePatterns) {
-              const matches = this.documentContent.match(pattern);
-              if (matches && matches.length > 0) {
-                markdownFormula = matches[0].trim();
-                break;
-              }
-            }
+          // 行内公式：按全局顺序直接对应
+          if (this._formulaIndex.inline < inlineFormulas.length) {
+            mjxContainer.dataset.originalMarkdown =
+              inlineFormulas[this._formulaIndex.inline];
+            this._formulaIndex.inline++;
           }
         }
-
-        // 如果还是找不到，使用 LaTeX 内容构造 Markdown 格式
-        if (!markdownFormula) {
-          markdownFormula = isDisplayMode
-            ? `$$${latexContent}$$`
-            : `$${latexContent}$`;
-        }
-
-        // 将原始 Markdown 格式存储到 data 属性
-        scriptElement.dataset.originalMarkdown = markdownFormula;
       });
+    },
+
+    // 从原始文档中查找包含指定 LaTeX 内容的完整公式（原封不动返回）
+    findOriginalFormula(latexContent, isDisplayMode) {
+      if (!this.documentContent || !latexContent) return "";
+
+      // 归一化用于匹配
+      const normalizedLatex = latexContent.replace(/\s+/g, " ").trim();
+
+      if (isDisplayMode) {
+        // 块级公式：匹配 $$...$$ 或 \[...\]
+        const allDisplayFormulas = this.documentContent.match(
+          /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]/g
+        );
+
+        if (allDisplayFormulas) {
+          // 优先匹配包含完整环境的公式（如 \begin{array}）
+          // 先找包含环境的公式
+          const formulasWithEnvironments = [];
+          const formulasWithoutEnvironments = [];
+
+          for (const formula of allDisplayFormulas) {
+            if (
+              formula.includes("\\begin{") ||
+              formula.includes("\\begin{array}")
+            ) {
+              formulasWithEnvironments.push(formula);
+            } else {
+              formulasWithoutEnvironments.push(formula);
+            }
+          }
+
+          // 先匹配包含环境的公式（按长度排序）
+          const sortedWithEnv = formulasWithEnvironments.sort(
+            (a, b) => b.length - a.length
+          );
+          const sortedWithoutEnv = formulasWithoutEnvironments.sort(
+            (a, b) => b.length - a.length
+          );
+
+          // 合并：先匹配有环境的，再匹配没有环境的
+          const sortedFormulas = [...sortedWithEnv, ...sortedWithoutEnv];
+
+          // 找到包含 script 内容的完整公式
+          for (const formula of sortedFormulas) {
+            // 提取公式内容用于比较
+            let formulaContent = "";
+            if (formula.startsWith("$$") && formula.endsWith("$$")) {
+              formulaContent = formula.slice(2, -2).trim();
+            } else if (formula.startsWith("\\[") && formula.endsWith("\\]")) {
+              formulaContent = formula.slice(2, -2).trim();
+            }
+
+            // 归一化后比较内容
+            const normalizedFormula = formulaContent
+              .replace(/\s+/g, " ")
+              .trim();
+
+            // 如果原始公式包含 script 中的内容，说明 script 只是公式的一部分
+            // 使用完整的原始公式（原封不动）
+            if (
+              normalizedFormula.length > 0 &&
+              normalizedLatex.length > 0 &&
+              normalizedFormula.includes(normalizedLatex)
+            ) {
+              // 直接返回原始公式，不做任何修改
+              return formula;
+            }
+          }
+        }
+      } else {
+        // 行内公式：匹配 $...$ 或 \(...\)
+        const allInlineFormulas = this.documentContent.match(
+          /\$[^$\n]+?\$|\\\([^)]+?\\\)/g
+        );
+
+        if (allInlineFormulas) {
+          for (const formula of allInlineFormulas) {
+            // 排除块级公式
+            if (formula.startsWith("$$") && formula.endsWith("$$")) continue;
+
+            // 提取公式内容用于比较
+            let formulaContent = "";
+            if (
+              formula.startsWith("$") &&
+              formula.endsWith("$") &&
+              !formula.startsWith("$$")
+            ) {
+              formulaContent = formula.slice(1, -1).trim();
+            } else if (formula.startsWith("\\(") && formula.endsWith("\\)")) {
+              formulaContent = formula.slice(2, -2).trim();
+            }
+
+            // 归一化后比较内容
+            const normalizedFormula = formulaContent
+              .replace(/\s+/g, " ")
+              .trim();
+
+            // 如果内容匹配，直接使用原始公式文本（原封不动）
+            if (
+              normalizedFormula === normalizedLatex ||
+              (normalizedFormula.length > 0 &&
+                normalizedLatex.length > 0 &&
+                (normalizedFormula.includes(normalizedLatex) ||
+                  normalizedLatex.includes(normalizedFormula)))
+            ) {
+              // 直接返回原始公式，不做任何修改
+              return formula;
+            }
+          }
+        }
+      }
+
+      return "";
     },
 
     // 转义正则表达式特殊字符
@@ -1148,132 +1248,27 @@ export default {
     // 复制公式到剪贴板（复制原始 Markdown 格式）
     async copyFormulaToClipboard(formulaElement) {
       try {
-        // 查找包含原始公式内容的 script 标签
-        let scriptElement = null;
+        // 首先确保所有公式都有原始 Markdown 数据
+        this.attachOriginalMarkdownToFormulas();
 
-        // 方法1: 查找相邻的 script 标签
-        let sibling = formulaElement.previousElementSibling;
-        while (sibling && !scriptElement) {
-          if (
-            sibling.tagName === "SCRIPT" &&
-            (sibling.type === "math/tex" ||
-              sibling.type === "math/tex; mode=display")
-          ) {
-            scriptElement = sibling;
-            break;
-          }
-          sibling = sibling.previousElementSibling;
-        }
-
-        // 如果前一个兄弟节点没找到，查找后一个兄弟节点
-        if (!scriptElement) {
-          sibling = formulaElement.nextElementSibling;
-          while (sibling && !scriptElement) {
-            if (
-              sibling.tagName === "SCRIPT" &&
-              (sibling.type === "math/tex" ||
-                sibling.type === "math/tex; mode=display")
-            ) {
-              scriptElement = sibling;
-              break;
-            }
-            sibling = sibling.nextElementSibling;
-          }
-        }
-
-        // 方法2: 在元素内部查找 script 标签
-        if (!scriptElement && formulaElement.querySelector) {
-          scriptElement = formulaElement.querySelector(
-            "script[type='math/tex'], script[type='math/tex; mode=display']"
-          );
-        }
-
-        // 方法3: 从父元素查找
-        if (!scriptElement) {
-          let current = formulaElement.parentElement;
-          let depth = 0;
-          while (current && depth < 3 && !scriptElement) {
-            scriptElement = current.querySelector
-              ? current.querySelector(
-                  "script[type='math/tex'], script[type='math/tex; mode=display']"
-                )
-              : null;
-            if (scriptElement) break;
-            current = current.parentElement;
-            depth++;
-          }
-        }
-
-        // 获取原始 Markdown 格式
+        // 直接从 mjx-container 元素获取原始 Markdown（MathJax 3 渲染后 script 标签会被移除）
         let markdownFormula = "";
 
-        if (scriptElement && scriptElement.dataset.originalMarkdown) {
-          // 优先使用已存储的原始 Markdown 格式
-          markdownFormula = scriptElement.dataset.originalMarkdown;
-        } else if (scriptElement) {
-          // 如果没有存储，尝试从原始文档中查找
-          const latexContent = (
-            scriptElement.textContent ||
-            scriptElement.innerText ||
-            ""
-          ).trim();
-          const isDisplayMode = scriptElement.type === "math/tex; mode=display";
+        // 找到最外层的 mjx-container（可能是点击了嵌套的子元素）
+        let mjxContainer = formulaElement;
+        if (mjxContainer.tagName !== "MJX-CONTAINER") {
+          mjxContainer = formulaElement.closest("mjx-container");
+        }
 
-          if (latexContent && this.documentContent) {
-            // 尝试从原始文档中匹配
-            const escapedContent = latexContent.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              "\\$&"
-            );
-
-            if (isDisplayMode) {
-              const patterns = [
-                new RegExp(`\\$\\$\\s*${escapedContent}\\s*\\$\\$`, "g"),
-                new RegExp(`\\\\\\[\\s*${escapedContent}\\s*\\\\\\]`, "g"),
-              ];
-
-              for (const pattern of patterns) {
-                const matches = this.documentContent.match(pattern);
-                if (matches && matches.length > 0) {
-                  markdownFormula = matches[0].trim();
-                  break;
-                }
-              }
-            } else {
-              const patterns = [
-                new RegExp(`\\$\\s*${escapedContent}\\s*\\$`, "g"),
-                new RegExp(`\\\\\\(\\s*${escapedContent}\\s*\\\\\\)`, "g"),
-              ];
-
-              for (const pattern of patterns) {
-                const matches = this.documentContent.match(pattern);
-                if (matches && matches.length > 0) {
-                  markdownFormula = matches[0].trim();
-                  break;
-                }
-              }
-            }
-
-            // 如果还是找不到，构造 Markdown 格式
-            if (!markdownFormula) {
-              markdownFormula = isDisplayMode
-                ? `$$${latexContent}$$`
-                : `$${latexContent}$`;
-            }
+        // 如果找到的是嵌套的 mjx-container，向上查找最外层的
+        if (mjxContainer) {
+          while (mjxContainer.parentElement?.closest("mjx-container")) {
+            mjxContainer = mjxContainer.parentElement.closest("mjx-container");
           }
-        } else {
-          // 如果找不到 script 标签，使用元素的文本内容作为后备
-          const formulaContent =
-            formulaElement.textContent || formulaElement.innerText || "";
-          const trimmedContent = formulaContent.trim().replace(/\s+/g, " ");
-          const isBlock =
-            formulaElement.closest("p") === null ||
-            formulaElement.parentElement?.tagName === "DIV";
 
-          if (trimmedContent) {
-            markdownFormula = isBlock
-              ? `$$${trimmedContent}$$`
-              : `$${trimmedContent}$`;
+          // 从最外层的 mjx-container 获取原始 Markdown
+          if (mjxContainer.dataset.originalMarkdown) {
+            markdownFormula = mjxContainer.dataset.originalMarkdown;
           }
         }
 
@@ -1285,8 +1280,27 @@ export default {
             duration: 2000,
           });
         } else {
+          // 调试信息
+          console.error("无法获取公式代码", {
+            formulaElement: formulaElement.tagName,
+            formulaClasses: formulaElement.className,
+            hasOriginalMarkdown: formulaElement.dataset.originalMarkdown
+              ? true
+              : false,
+            totalMjxContainers:
+              this.$refs.contentRef?.querySelectorAll("mjx-container")
+                ?.length || 0,
+            cachedFormulas: this._cachedOriginalFormulas
+              ? {
+                  display: this._cachedOriginalFormulas.display.length,
+                  inline: this._cachedOriginalFormulas.inline.length,
+                }
+              : null,
+            formulaIndex: this._formulaIndex,
+          });
+
           ElMessage.warning({
-            message: "无法获取公式代码",
+            message: "无法获取公式代码，请检查控制台",
             duration: 2000,
           });
         }
@@ -1490,7 +1504,8 @@ export default {
                     formulaContent.includes(normalizedLatex) ||
                     normalizedLatex.includes(formulaContent)
                   ) {
-                    markdownFormula = formula.trim();
+                    // 原封不动返回，不做任何处理
+                    markdownFormula = formula;
                     break;
                   }
                 }

@@ -9,8 +9,8 @@ langchain==0.3.27
 langchain-openai==0.2.9
 langchain-community==0.3.15
 
-# faiss-cpu==1.12.0
-# sentence-transformers=5.1.2
+faiss-cpu==1.12.0
+sentence-transformers==5.1.2
 # 注意：faiss-gpu 在 Python 3.13 下不可用（conda-forge 最高支持 Python 3.12）
 # 如果使用 Python 3.12 或更低版本，可以使用 conda 安装 GPU 版本：
 #   conda install -c conda-forge faiss-gpu
