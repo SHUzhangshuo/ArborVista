@@ -83,6 +83,21 @@ def process_files_with_mineru_api(file_paths, output_dir, app, is_ocr=True, enab
         print(f"   🌐 语言: {language}")
         print(f"   🏗️ 布局模型: {layout_model}")
         
+        # 构建file_id映射和原始文件名映射（用于本地模式时传递正确的file_id和原始文件名）
+        file_id_map = {}
+        original_filename_map = {}
+        if saved_files:
+            for saved_file in saved_files:
+                file_id = saved_file['file_id']
+                saved_filename = saved_file['saved_filename']
+                original_filename = saved_file['original_filename']
+                # 查找对应的文件路径
+                for file_path in valid_files:
+                    if Path(file_path).name == saved_filename:
+                        file_id_map[file_path] = file_id
+                        original_filename_map[file_path] = original_filename
+                        break
+        
         # 批量处理文件
         result = api_client.process_files_batch(
             file_paths=valid_files,
@@ -93,7 +108,9 @@ def process_files_with_mineru_api(file_paths, output_dir, app, is_ocr=True, enab
             is_ocr=is_ocr,
             enable_formula=enable_formula,
             enable_table=enable_table,
-            layout_model=layout_model
+            layout_model=layout_model,
+            file_id_map=file_id_map if file_id_map else None,
+            original_filename_map=original_filename_map if original_filename_map else None
         )
         
         if result['success']:
@@ -504,19 +521,15 @@ def register_routes(app):
             if not file_paths:
                 return jsonify({'error': '没有有效的文件'}), 400
             
-            # 批量处理文件，但将结果直接存储到文库目录下
+            # 批量处理文件，直接输出到文库目录下
             try:
                 print("开始调用MinerU API批量处理...")
                 print(f"配置参数: OCR={is_ocr}, 公式={enable_formula}, 表格={enable_table}, 语言={language}, 模型={layout_model}")
                 
-                # 创建一个临时批次目录用于MinerU API处理
-                batch_id = str(uuid.uuid4())
-                temp_batch_dir = library_dir / batch_id
-                temp_batch_dir.mkdir(exist_ok=True)
-                
+                # 直接使用文库目录作为输出目录（本地模式会为每个文件创建对应的子目录）
                 result = process_files_with_mineru_api(
                     file_paths, 
-                    str(temp_batch_dir), 
+                    str(library_dir),  # 直接输出到文库目录
                     app, 
                     is_ocr=is_ocr, 
                     enable_formula=enable_formula, 
@@ -527,42 +540,34 @@ def register_routes(app):
                 )
                 
                 if result['success']:
-                    print("批量处理成功，开始重新组织文件结构...")
+                    print("批量处理成功")
                     
-                    # 将处理结果从临时批次目录移动到文库目录下
+                    # 处理结果已经在最终目录了，只需要整理返回信息
                     processed_files = []
                     success_count = 0
                     
                     for processed_file in result['result']['processed_files']:
                         if processed_file['success']:
-                            # 查找处理后的文件目录
-                            data_id = processed_file.get('data_id', '')
-                            if data_id:
-                                source_dir = temp_batch_dir / data_id
-                                if source_dir.exists():
-                                    # 创建目标文件目录
-                                    file_id = data_id.replace('_b1', '')  # 移除_b1后缀
-                                    target_dir = library_dir / file_id
-                                    
-                                    # 移动文件
-                                    if target_dir.exists():
-                                        shutil.rmtree(target_dir)
-                                    shutil.move(str(source_dir), str(target_dir))
-                                    
-                                    processed_files.append({
-                                        'file_id': file_id,
-                                        'original_filename': processed_file.get('original_name', ''),
-                                        'success': True
-                                    })
-                                    success_count += 1
-                                    print(f"✅ 文件移动成功: {processed_file.get('original_name', '')} -> {target_dir}")
+                            # 从output_dir中提取目录名（格式：{文件名}-{file_id}）
+                            output_dir_path = processed_file.get('output_dir', '')
+                            if output_dir_path:
+                                # 从路径中提取目录名
+                                dir_name = Path(output_dir_path).name
+                                # 从目录名中提取file_id（最后一个-后面的部分）
+                                if '-' in dir_name:
+                                    file_id = dir_name.rsplit('-', 1)[-1]
                                 else:
-                                    processed_files.append({
-                                        'file_id': data_id,
-                                        'original_filename': processed_file.get('original_name', ''),
-                                        'success': False,
-                                        'error': '处理后的文件目录不存在'
-                                    })
+                                    # 如果没有-，说明可能格式不对，尝试从data_id获取
+                                    data_id = processed_file.get('data_id', '')
+                                    file_id = data_id.replace('_b1', '') if data_id else ''
+                                
+                                processed_files.append({
+                                    'file_id': file_id,
+                                    'original_filename': processed_file.get('original_name', ''),
+                                    'success': True
+                                })
+                                success_count += 1
+                                print(f"✅ 文件处理成功: {processed_file.get('original_name', '')} -> {output_dir_path}")
                             else:
                                 processed_files.append({
                                     'file_id': '',
@@ -577,10 +582,6 @@ def register_routes(app):
                                 'success': False,
                                 'error': processed_file.get('error', '处理失败')
                             })
-                    
-                    # 清理临时批次目录
-                    if temp_batch_dir.exists():
-                        shutil.rmtree(temp_batch_dir)
                     
                     return jsonify({
                         'success': True,
@@ -689,13 +690,24 @@ def register_routes(app):
     def get_library_image(library_id, file_id, image_path):
         """获取指定文库中指定文件的图片"""
         try:
-            file_dir, _ = _find_file_directory(library_id, file_id, app.config['OUTPUT_DIR'])
+            file_dir, found_library_id = _find_file_directory(library_id, file_id, app.config['OUTPUT_DIR'])
             
             if not file_dir:
+                print(f"❌ 图片404: 文件目录不存在 - library_id={library_id}, file_id={file_id}")
                 return jsonify({'error': '文件目录不存在'}), 404
             
             image_file = file_dir / "images" / image_path
             if not image_file.exists():
+                # 尝试查找所有可能的图片文件
+                images_dir = file_dir / "images"
+                if images_dir.exists():
+                    available_images = list(images_dir.glob("*"))
+                    print(f"❌ 图片404: 图片不存在 - 请求路径: {image_path}")
+                    print(f"   文件目录: {file_dir}")
+                    print(f"   图片目录: {images_dir}")
+                    print(f"   可用图片文件: {[img.name for img in available_images[:5]]}")
+                else:
+                    print(f"❌ 图片404: 图片目录不存在 - {images_dir}")
                 return jsonify({'error': '图片不存在'}), 404
             
             response = send_from_directory(str(image_file.parent), image_path)
@@ -709,7 +721,9 @@ def register_routes(app):
             return response
             
         except Exception as e:
-            print(f"获取文库图片失败: {str(e)}")
+            print(f"❌ 获取文库图片失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return jsonify({'error': f'获取图片失败: {str(e)}'}), 500
 
     @app.route('/api/files/<file_id>/images/<path:image_path>')

@@ -58,7 +58,7 @@
     <footer class="app-footer">
       <div class="footer-container">
         <div class="footer-left">
-          <p>&copy; 2024 ArborVista. 智能文档处理平台</p>
+          <p>&copy; 2025 ArborVista. 智能文档处理平台</p>
         </div>
         <div class="footer-right">
           <a href="#" class="footer-link">帮助中心</a>

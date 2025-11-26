@@ -73,13 +73,18 @@ class MinerUAPI:
                     "MinerU command check failed. Please ensure MinerU is properly installed."
                 )
     
-    def process_files_batch(self, file_paths, output_dir, batch_index=0, max_files_per_batch=200, language="en", is_ocr=True, enable_formula=True, enable_table=True, layout_model="doclayout_yolo"):
-        """批量处理文件 - 支持在线API和本地调用"""
+    def process_files_batch(self, file_paths, output_dir, batch_index=0, max_files_per_batch=200, language="en", is_ocr=True, enable_formula=True, enable_table=True, layout_model="doclayout_yolo", file_id_map=None, original_filename_map=None):
+        """批量处理文件 - 支持在线API和本地调用
+        
+        Args:
+            file_id_map: 文件路径到file_id的映射字典，用于本地模式时指定正确的file_id
+            original_filename_map: 文件路径到原始文件名的映射字典，用于生成目录名
+        """
         if self.use_local:
             # Local mode: process files sequentially
             return self._process_local_batch(
                 file_paths, output_dir, is_ocr, enable_formula,
-                enable_table, language, layout_model
+                enable_table, language, layout_model, file_id_map=file_id_map, original_filename_map=original_filename_map
             )
         else:
             # Online mode - 严格按照test_input.py和test_output.py的逻辑
@@ -160,42 +165,75 @@ class MinerUAPI:
         enable_formula=True,
         enable_table=True,
         language="en",
-        layout_model="doclayout_yolo"
+        layout_model="doclayout_yolo",
+        file_id_map=None,
+        original_filename_map=None
     ):
-        """使用本地MinerU vLLM后端批量处理文件"""
+        """使用本地MinerU vLLM后端批量处理文件
+        
+        Args:
+            file_paths: 文件路径列表
+            output_dir: 输出目录（最终目标目录，每个文件会创建对应的子目录）
+            file_id_map: 文件路径到file_id的映射字典，如果提供则使用指定的file_id
+            original_filename_map: 文件路径到原始文件名的映射字典，用于生成目录名
+        """
         results = []
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
+        base_output_path = Path(output_dir)
+        base_output_path.mkdir(parents=True, exist_ok=True)
         
         print(f"🚀 开始本地批量处理 {len(file_paths)} 个文件")
         
         for idx, file_path in enumerate(file_paths, 1):
-            print(f"处理文件 {idx}/{len(file_paths)}: {Path(file_path).name}")
+            file_path_obj = Path(file_path)
+            print(f"处理文件 {idx}/{len(file_paths)}: {file_path_obj.name}")
+            
+            # 获取file_id：优先使用file_id_map，否则使用文件名
+            if file_id_map and file_path in file_id_map:
+                file_id = file_id_map[file_path]
+            else:
+                file_id = file_path_obj.stem
+            
+            # 获取原始文件名，用于生成目录名
+            if original_filename_map and file_path in original_filename_map:
+                original_filename = original_filename_map[file_path]
+                # 去掉扩展名，将空格替换为下划线
+                filename_part = Path(original_filename).stem.replace(' ', '_')
+            else:
+                # 如果没有原始文件名，使用保存的文件名（去掉扩展名）
+                filename_part = file_path_obj.stem.replace(' ', '_')
+            
+            # 生成目录名：{文件名}-{file_id}
+            dir_name = f"{filename_part}-{file_id}"
+            
+            # 为每个文件创建最终目标目录（直接输出到这里）
+            file_output_dir = base_output_path / dir_name
+            file_output_dir.mkdir(parents=True, exist_ok=True)
+            print(f"📁 文件输出目录: {file_output_dir}")
+            
             result = self._process_local(
-                Path(file_path),
-                output_path,
+                file_path_obj,
+                file_output_dir,  # 直接输出到最终目录
                 is_ocr,
                 enable_formula,
                 enable_table,
                 language,
-                layout_model
+                layout_model,
+                file_id=file_id
             )
             
             # 转换结果格式以匹配API模式的返回格式
             if result['success']:
-                # 从输出路径中提取data_id（使用文件名作为data_id）
-                file_id = Path(file_path).stem
                 data_id = f"{file_id}_b1"
                 
                 results.append({
-                    'original_name': Path(file_path).name,
+                    'original_name': file_path_obj.name,
                     'data_id': data_id,
-                    'output_dir': str(result.get('output_dir', output_path / data_id)),
+                    'output_dir': str(file_output_dir),
                     'success': True
                 })
             else:
                 results.append({
-                    'original_name': Path(file_path).name,
+                    'original_name': file_path_obj.name,
                     'data_id': '',
                     'output_dir': None,
                     'success': False,
@@ -208,7 +246,7 @@ class MinerUAPI:
             'processed_files': results,
             'success_count': success_count,
             'total_count': len(results),
-            'output_dir': str(output_path),
+            'output_dir': str(base_output_path),
             'message': f'批量处理完成，成功: {success_count}/{len(results)}'
         }
     
@@ -220,9 +258,16 @@ class MinerUAPI:
         enable_formula: bool = True,
         enable_table: bool = True,
         language: str = "en",
-        layout_model: str = "doclayout_yolo"
+        layout_model: str = "doclayout_yolo",
+        file_id: str = None
     ):
-        """使用本地MinerU vLLM后端处理单个文件"""
+        """使用本地MinerU vLLM后端处理单个文件
+        
+        Args:
+            input_path: 输入文件路径
+            output_path: 输出目录（MinerU会在这里创建子目录）
+            file_id: 文件ID，如果提供则使用此ID，否则使用input_path.stem
+        """
         try:
             # Build mineru command
             cmd = [
@@ -242,39 +287,162 @@ class MinerUAPI:
             )
             
             if result.returncode == 0:
-                # Find output markdown file (mineru creates files in subdirectories like output/1/vlm/)
-                md_files = list(output_path.rglob("*.md"))
-                if md_files:
-                    # Sort by modification time, get the most recent one
-                    md_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                    md_file = md_files[0]
+                # MinerU 会在输出目录下创建子目录，需要将内容移动到目标目录
+                # 检查是否有输出文件
+                all_files = list(output_path.rglob("*"))
+                if all_files:
+                    print(f"✅ MinerU 处理完成，输出目录: {output_path}")
                     
-                    # Create a structured output directory for this file
-                    file_id = input_path.stem
-                    data_id = f"{file_id}_b1"
-                    file_output_dir = output_path / data_id
-                    file_output_dir.mkdir(parents=True, exist_ok=True)
+                    # 查找所有直接子目录
+                    all_subdirs = [d for d in output_path.iterdir() if d.is_dir()]
                     
-                    # Copy markdown file to structured directory
-                    target_md = file_output_dir / "full.md"
-                    shutil.copy2(md_file, target_md)
+                    if all_subdirs:
+                        print(f"📁 发现 {len(all_subdirs)} 个子目录，开始移动内容到目标目录...")
+                        
+                        # 优先查找以 file_id 命名的子目录
+                        target_subdir = None
+                        if file_id:
+                            for subdir in all_subdirs:
+                                if subdir.name == file_id:
+                                    target_subdir = subdir
+                                    print(f"   找到 file_id 子目录: {subdir.name}")
+                                    break
+                        
+                        # 如果没有找到 file_id 子目录，查找数字命名的子目录（如 1/, 2/）
+                        if not target_subdir:
+                            digit_subdirs = [d for d in all_subdirs if d.name.isdigit()]
+                            if digit_subdirs:
+                                target_subdir = digit_subdirs[0]
+                                print(f"   找到数字子目录: {target_subdir.name}")
+                        
+                        # 如果找到了目标子目录，将其内容（保留目录结构）移动到主目录
+                        if target_subdir:
+                            print(f"   处理子目录: {target_subdir.name}")
+                            
+                            # 检查子目录中是否有 vlm 子目录（本地模式特有）
+                            vlm_subdir = target_subdir / "vlm"
+                            if vlm_subdir.exists() and vlm_subdir.is_dir():
+                                print(f"   发现 vlm 子目录，处理 vlm 目录内容...")
+                                # 将 vlm 目录中的内容移动到 file_id 子目录
+                                for item in vlm_subdir.iterdir():
+                                    target_item = target_subdir / item.name
+                                    
+                                    # 如果目标已存在，跳过或添加后缀
+                                    if target_item.exists():
+                                        if item.is_file():
+                                            base_name = item.stem
+                                            extension = item.suffix
+                                            counter = 1
+                                            while target_item.exists():
+                                                target_item = target_subdir / f"{base_name}_{counter}{extension}"
+                                                counter += 1
+                                        else:
+                                            # 如果是目录，添加后缀
+                                            counter = 1
+                                            while target_item.exists():
+                                                target_item = target_subdir / f"{item.name}_{counter}"
+                                                counter += 1
+                                    
+                                    # 移动文件或目录（保留目录结构）
+                                    shutil.move(str(item), str(target_item))
+                                    if item.is_file():
+                                        print(f"      ✅ 移动文件: {item.name}")
+                                    else:
+                                        print(f"      ✅ 移动目录: {item.name}")
+                                
+                                # 删除空的 vlm 目录
+                                try:
+                                    if vlm_subdir.exists():
+                                        shutil.rmtree(vlm_subdir)
+                                        print(f"      🗑️ 删除 vlm 子目录")
+                                except Exception as e:
+                                    print(f"      ⚠️ 删除 vlm 子目录失败: {e}")
+                            
+                            # 遍历子目录中的所有内容（文件和目录）
+                            for item in target_subdir.iterdir():
+                                target_item = output_path / item.name
+                                
+                                # 如果目标已存在，跳过或添加后缀
+                                if target_item.exists():
+                                    if item.is_file():
+                                        base_name = item.stem
+                                        extension = item.suffix
+                                        counter = 1
+                                        while target_item.exists():
+                                            target_item = output_path / f"{base_name}_{counter}{extension}"
+                                            counter += 1
+                                    else:
+                                        # 如果是目录，添加后缀
+                                        counter = 1
+                                        while target_item.exists():
+                                            target_item = output_path / f"{item.name}_{counter}"
+                                            counter += 1
+                                
+                                # 移动文件或目录（保留目录结构）
+                                shutil.move(str(item), str(target_item))
+                                if item.is_file():
+                                    print(f"   ✅ 移动文件: {item.name}")
+                                else:
+                                    print(f"   ✅ 移动目录: {item.name}")
+                            
+                            # 删除空的子目录
+                            try:
+                                if target_subdir.exists():
+                                    shutil.rmtree(target_subdir)
+                                    print(f"   🗑️ 删除子目录: {target_subdir.name}")
+                            except Exception as e:
+                                print(f"   ⚠️ 删除子目录失败: {e}")
+                        else:
+                            # 如果没有找到特定子目录，处理所有子目录（扁平化）
+                            print(f"   ⚠️ 未找到特定子目录，处理所有子目录...")
+                            for subdir in all_subdirs:
+                                print(f"   处理子目录: {subdir.name}")
+                                # 递归查找所有文件
+                                for item in subdir.rglob("*"):
+                                    if item.is_file():
+                                        # 计算相对路径（相对于子目录）
+                                        rel_path = item.relative_to(subdir)
+                                        # 保留目录结构
+                                        target_path = output_path / rel_path
+                                        
+                                        # 确保父目录存在
+                                        target_path.parent.mkdir(parents=True, exist_ok=True)
+                                        
+                                        # 如果目标文件已存在，添加序号
+                                        if target_path.exists():
+                                            base_name = target_path.stem
+                                            extension = target_path.suffix
+                                            parent_dir = target_path.parent
+                                            counter = 1
+                                            while target_path.exists():
+                                                target_path = parent_dir / f"{base_name}_{counter}{extension}"
+                                                counter += 1
+                                        
+                                        # 移动文件
+                                        shutil.move(str(item), str(target_path))
+                                        print(f"   ✅ 移动文件: {rel_path}")
+                                
+                                # 删除空的子目录
+                                try:
+                                    if subdir.exists():
+                                        shutil.rmtree(subdir)
+                                        print(f"   🗑️ 删除子目录: {subdir.name}")
+                                except Exception as e:
+                                    print(f"   ⚠️ 删除子目录失败: {e}")
                     
-                    # Copy images if they exist
-                    images_dir = file_output_dir / "images"
-                    images_dir.mkdir(exist_ok=True)
-                    
-                    # Find images in the same directory as the markdown file
-                    md_dir = md_file.parent
-                    for img_file in md_dir.glob("*.jpg"):
-                        shutil.copy2(img_file, images_dir / img_file.name)
-                    for img_file in md_dir.glob("*.png"):
-                        shutil.copy2(img_file, images_dir / img_file.name)
+                    # 再次检查目标目录中的内容
+                    final_items = list(output_path.iterdir())
+                    print(f"📁 最终内容数量: {len(final_items)}")
+                    for item in final_items:
+                        if item.is_file():
+                            print(f"   📄 {item.name}")
+                        else:
+                            print(f"   📁 {item.name}/")
                     
                     return {
                         'success': True,
                         'input_path': str(input_path),
-                        'output_dir': str(file_output_dir),
-                        'md_file': str(target_md),
+                        'output_dir': str(output_path),
                         'message': 'File processed successfully'
                     }
                 else:
