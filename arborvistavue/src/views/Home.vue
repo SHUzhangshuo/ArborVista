@@ -29,6 +29,15 @@
                 <el-icon><Upload /></el-icon>
                 开始处理文档
               </el-button>
+              <el-button
+                type="default"
+                size="large"
+                class="config-button"
+                @click="showConfigDialog = true"
+              >
+                <el-icon><Setting /></el-icon>
+                API配置
+              </el-button>
             </div>
           </div>
           <div class="hero-visual">
@@ -85,10 +94,13 @@
             <div class="card-content">
               <el-select
                 v-model="selectedLibrary"
-                placeholder="选择文库"
+                :placeholder="
+                  libraries.length === 0 ? '请先创建文档库' : '选择文库'
+                "
                 @change="onLibraryChange"
                 class="library-select"
                 size="large"
+                :disabled="libraries.length === 0"
               >
                 <el-option
                   v-for="library in libraries"
@@ -101,10 +113,15 @@
                 @click="showCreateLibraryDialog = true"
                 class="create-library-btn"
                 size="large"
+                type="primary"
               >
                 <el-icon><Plus /></el-icon>
-                创建新文库
+                {{ libraries.length === 0 ? "创建第一个文档库" : "创建新文库" }}
               </el-button>
+              <div v-if="libraries.length === 0" class="library-tip">
+                <el-icon><InfoFilled /></el-icon>
+                <span>您还没有创建任何文档库，请先创建文档库才能上传文件</span>
+              </div>
             </div>
           </div>
 
@@ -235,7 +252,7 @@
             type="primary"
             size="large"
             :loading="isProcessing"
-            :disabled="fileList.length === 0"
+            :disabled="fileList.length === 0 || !selectedLibrary"
             class="process-button"
           >
             <el-icon v-if="!isProcessing"><Setting /></el-icon>
@@ -248,6 +265,93 @@
         </div>
       </div>
     </section>
+
+    <!-- API配置对话框 -->
+    <el-dialog
+      v-model="showConfigDialog"
+      title="API配置"
+      width="600px"
+      :before-close="handleConfigClose"
+      class="config-dialog"
+    >
+      <el-form
+        ref="configFormRef"
+        :model="userConfig"
+        label-width="140px"
+        class="config-form"
+      >
+        <el-divider content-position="left">MinerU配置</el-divider>
+        <el-form-item label="MinerU API Token">
+          <el-input
+            v-model="userConfig.mineru_api_token"
+            type="password"
+            placeholder="请输入MinerU API Token"
+            show-password
+            clearable
+          />
+          <div class="config-tip">
+            <el-icon><InfoFilled /></el-icon>
+            <span>用于文档处理功能，如果为空将提示输入</span>
+          </div>
+        </el-form-item>
+
+        <el-divider content-position="left"
+          >OpenAI配置（用于智能问答）</el-divider
+        >
+        <el-form-item label="OpenAI API Key">
+          <el-input
+            v-model="userConfig.openai_api_key"
+            type="password"
+            placeholder="请输入OpenAI API Key"
+            show-password
+            clearable
+          />
+        </el-form-item>
+        <el-form-item label="OpenAI Base URL">
+          <el-input
+            v-model="userConfig.openai_base_url"
+            placeholder="例如: http://your-api-server-url/v1/"
+            clearable
+          />
+        </el-form-item>
+        <el-form-item label="OpenAI Model">
+          <el-input
+            v-model="userConfig.openai_model"
+            placeholder="例如: gpt-5"
+            clearable
+          />
+        </el-form-item>
+        <el-form-item label="Temperature">
+          <el-input-number
+            v-model="userConfig.openai_temperature"
+            :min="0"
+            :max="2"
+            :step="0.1"
+            placeholder="0.7"
+            style="width: 100%"
+          />
+          <div class="config-tip">
+            <el-icon><InfoFilled /></el-icon>
+            <span>用于向量数据库和智能问答功能，如果为空将提示输入</span>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showConfigDialog = false" size="large">
+            取消
+          </el-button>
+          <el-button
+            type="primary"
+            @click="saveConfig"
+            :loading="isSavingConfig"
+            size="large"
+          >
+            保存
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
 
     <!-- 创建文库对话框 -->
     <el-dialog
@@ -309,9 +413,16 @@ import {
   Setting,
   Close,
   Loading,
+  InfoFilled,
 } from "@element-plus/icons-vue";
-import { ElMessage } from "element-plus";
-import { uploadFiles, getLibraries, createLibrary } from "@/config/api";
+import { ElMessage, ElMessageBox } from "element-plus";
+import {
+  uploadFiles,
+  getLibraries,
+  createLibrary,
+  getApiBaseUrl,
+} from "@/config/api";
+import axios from "axios";
 
 export default {
   name: "HomeView",
@@ -325,6 +436,7 @@ export default {
     Setting,
     Close,
     Loading,
+    InfoFilled,
   },
   data() {
     return {
@@ -376,6 +488,17 @@ export default {
       // 文件上传
       fileList: [],
       isProcessing: false,
+
+      // API配置
+      showConfigDialog: false,
+      isSavingConfig: false,
+      userConfig: {
+        openai_api_key: "",
+        openai_base_url: "",
+        openai_model: "",
+        openai_temperature: "",
+        mineru_api_token: "",
+      },
     };
   },
   computed: {
@@ -391,6 +514,12 @@ export default {
   },
   mounted() {
     this.loadLibraries();
+    this.loadUserConfig();
+
+    // 检查路由参数，如果需要配置则打开配置对话框
+    if (this.$route.query.config === "true") {
+      this.showConfigDialog = true;
+    }
   },
   methods: {
     // 加载文库列表
@@ -403,18 +532,24 @@ export default {
           : [];
         console.log("解析后的文库列表:", this.libraries);
 
+        // 如果没有文库，清空选中状态
         if (this.libraries.length === 0) {
-          this.libraries = [{ id: "default", name: "默认文库" }];
-        }
-
-        // 设置默认选中的文库
-        if (!this.selectedLibrary && this.libraries.length > 0) {
-          this.selectedLibrary = this.libraries[0].id;
+          this.selectedLibrary = "";
+          ElMessage.warning("您还没有创建任何文档库，请先创建文档库");
+        } else {
+          // 设置默认选中的文库
+          if (
+            !this.selectedLibrary ||
+            !this.libraries.find((lib) => lib.id === this.selectedLibrary)
+          ) {
+            this.selectedLibrary = this.libraries[0].id;
+          }
         }
       } catch (error) {
         console.error("加载文库失败:", error);
-        this.libraries = [{ id: "default", name: "默认文库" }];
-        this.selectedLibrary = "default";
+        this.libraries = [];
+        this.selectedLibrary = "";
+        ElMessage.error("加载文库列表失败");
       }
     },
 
@@ -429,7 +564,7 @@ export default {
         await this.$refs.libraryFormRef.validate();
         this.isCreatingLibrary = true;
 
-        await createLibrary({
+        const response = await createLibrary({
           name: this.newLibrary.name,
           description: this.newLibrary.description,
         });
@@ -437,7 +572,15 @@ export default {
         ElMessage.success("文库创建成功");
         this.showCreateLibraryDialog = false;
         this.newLibrary = { name: "", description: "" };
-        this.loadLibraries();
+        await this.loadLibraries();
+        // 自动选中新创建的文库
+        if (
+          response.data &&
+          response.data.library &&
+          response.data.library.id
+        ) {
+          this.selectedLibrary = response.data.library.id;
+        }
       } catch (error) {
         console.error("创建文库失败:", error);
         ElMessage.error("创建文库失败");
@@ -491,6 +634,90 @@ export default {
       return (size / (1024 * 1024)).toFixed(1) + " MB";
     },
 
+    // 加载用户配置
+    async loadUserConfig() {
+      try {
+        const API_BASE_URL = getApiBaseUrl();
+        const response = await axios.get(`${API_BASE_URL}/api/auth/config`);
+        if (response.data.success) {
+          this.userConfig = {
+            openai_api_key: response.data.config.openai_api_key || "",
+            openai_base_url: response.data.config.openai_base_url || "",
+            openai_model: response.data.config.openai_model || "",
+            openai_temperature: response.data.config.openai_temperature || "",
+            mineru_api_token: response.data.config.mineru_api_token || "",
+          };
+        }
+      } catch (error) {
+        console.error("加载用户配置失败:", error);
+      }
+    },
+
+    // 保存配置
+    async saveConfig() {
+      try {
+        this.isSavingConfig = true;
+        const API_BASE_URL = getApiBaseUrl();
+        const response = await axios.post(
+          `${API_BASE_URL}/api/auth/config`,
+          this.userConfig
+        );
+        if (response.data.success) {
+          ElMessage.success("配置保存成功");
+          this.showConfigDialog = false;
+        } else {
+          ElMessage.error(response.data.error || "保存失败");
+        }
+      } catch (error) {
+        console.error("保存配置失败:", error);
+        if (error.response && error.response.data) {
+          ElMessage.error(error.response.data.error || "保存失败");
+        } else {
+          ElMessage.error("保存失败，请重试");
+        }
+      } finally {
+        this.isSavingConfig = false;
+      }
+    },
+
+    // 关闭配置对话框
+    handleConfigClose(done) {
+      this.loadUserConfig(); // 重新加载配置，取消修改
+      done();
+    },
+
+    // 检查MinerU配置
+    async checkMinerUConfig() {
+      try {
+        const API_BASE_URL = getApiBaseUrl();
+        const response = await axios.get(`${API_BASE_URL}/api/auth/config`);
+        if (response.data.success) {
+          const config = response.data.config;
+          if (!config.mineru_api_token) {
+            try {
+              await ElMessageBox.confirm(
+                "使用文档处理功能需要配置 MinerU API Token，是否现在配置？",
+                "需要配置",
+                {
+                  confirmButtonText: "去配置",
+                  cancelButtonText: "取消",
+                  type: "warning",
+                }
+              );
+              this.showConfigDialog = true;
+              return false;
+            } catch {
+              return false;
+            }
+          }
+        }
+        return true;
+      } catch (error) {
+        console.error("检查配置失败:", error);
+        return true; // 如果检查失败，允许继续
+      }
+    },
+
     // 开始处理
     async startProcessing() {
       if (this.fileList.length === 0) {
@@ -499,7 +726,12 @@ export default {
       }
 
       if (!this.selectedLibrary) {
-        ElMessage.warning("请先选择文库");
+        ElMessage.warning("请先创建或选择文档库");
+        return;
+      }
+
+      // 检查MinerU配置
+      if (!(await this.checkMinerUConfig())) {
         return;
       }
 
@@ -827,6 +1059,50 @@ export default {
 .create-library-btn {
   width: 100%;
   border-radius: var(--radius-md);
+  margin-top: var(--space-md);
+}
+
+.config-button {
+  margin-left: var(--space-md);
+  border-radius: var(--radius-md);
+}
+
+.config-dialog {
+  border-radius: var(--radius-xl);
+}
+
+.config-form {
+  margin-top: var(--space-md);
+}
+
+.config-tip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.config-tip .el-icon {
+  font-size: 14px;
+  color: var(--primary-color);
+}
+
+.library-tip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background: rgba(0, 122, 255, 0.1);
+  border-radius: var(--radius-md);
+  color: var(--primary-color);
+  font-size: 14px;
+}
+
+.library-tip .el-icon {
+  font-size: 18px;
 }
 
 .option-group {

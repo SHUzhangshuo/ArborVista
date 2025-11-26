@@ -292,7 +292,7 @@ export default {
     return {
       // 文库数据
       libraries: [],
-      selectedLibrary: "default",
+      selectedLibrary: "",
 
       // 文件数据
       files: [],
@@ -347,9 +347,12 @@ export default {
   created() {
     // 组件创建时的初始化
   },
-  mounted() {
-    this.loadLibraries();
-    this.loadFiles();
+  async mounted() {
+    await this.loadLibraries();
+    // 只有在选择了文库后才加载文件
+    if (this.selectedLibrary) {
+      this.loadFiles();
+    }
   },
   methods: {
     // 加载文库列表
@@ -359,24 +362,39 @@ export default {
         this.libraries = Array.isArray(response.data.data)
           ? response.data.data
           : [];
-        if (this.libraries.length === 0) {
-          this.libraries = [{ id: "default", name: "默认文库" }];
-        }
 
-        // 确保selectedLibrary在libraries中存在
-        if (!this.libraries.find((lib) => lib.id === this.selectedLibrary)) {
-          this.selectedLibrary = this.libraries[0]?.id || "default";
+        // 如果没有文库，清空选中状态
+        if (this.libraries.length === 0) {
+          this.selectedLibrary = "";
+          this.files = [];
+          this.filteredFiles = [];
+        } else {
+          // 确保selectedLibrary在libraries中存在
+          if (
+            !this.selectedLibrary ||
+            !this.libraries.find((lib) => lib.id === this.selectedLibrary)
+          ) {
+            this.selectedLibrary = this.libraries[0]?.id || "";
+            // 如果选择了文库，加载文件
+            if (this.selectedLibrary) {
+              this.loadFiles();
+            }
+          }
         }
       } catch (error) {
         console.error("加载文库失败:", error);
-        this.libraries = [{ id: "default", name: "默认文库" }];
-        this.selectedLibrary = "default";
+        this.libraries = [];
+        this.selectedLibrary = "";
       }
     },
 
     // 加载文件列表
     async loadFiles() {
-      if (!this.selectedLibrary) return;
+      if (!this.selectedLibrary) {
+        this.files = [];
+        this.filteredFiles = [];
+        return;
+      }
 
       this.isLoading = true;
       try {
@@ -553,6 +571,50 @@ export default {
       }
     },
 
+    // 检查OpenAI配置
+    async checkOpenAIConfig() {
+      try {
+        const axios = (await import("axios")).default;
+        const API_BASE_URL =
+          process.env.VUE_APP_API_URL ||
+          (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1"
+            ? "http://127.0.0.1:5000"
+            : `${window.location.protocol}//${window.location.hostname}:5000`);
+
+        const response = await axios.get(`${API_BASE_URL}/api/auth/config`);
+        if (response.data.success) {
+          const config = response.data.config;
+          if (
+            !config.openai_api_key ||
+            !config.openai_base_url ||
+            !config.openai_model
+          ) {
+            try {
+              await this.$confirm(
+                "使用向量数据库功能需要配置 OpenAI API（API Key、Base URL、Model），是否现在配置？",
+                "需要配置",
+                {
+                  confirmButtonText: "去配置",
+                  cancelButtonText: "取消",
+                  type: "warning",
+                }
+              );
+              // 跳转到首页配置
+              this.$router.push({ path: "/", query: { config: "true" } });
+              return false;
+            } catch {
+              return false;
+            }
+          }
+        }
+        return true;
+      } catch (error) {
+        console.error("检查配置失败:", error);
+        return true; // 如果检查失败，允许继续
+      }
+    },
+
     // 构建向量数据库
     async buildVectorStore() {
       if (!this.selectedLibrary) {
@@ -562,6 +624,11 @@ export default {
 
       if (this.filteredFiles.length === 0) {
         ElMessage.warning("文库中没有文档，无法构建向量数据库");
+        return;
+      }
+
+      // 检查OpenAI配置
+      if (!(await this.checkOpenAIConfig())) {
         return;
       }
 

@@ -1704,6 +1704,50 @@ export default {
       this.ragResult = null;
     },
 
+    // 检查OpenAI配置
+    async checkOpenAIConfig() {
+      try {
+        const axios = (await import("axios")).default;
+        const API_BASE_URL =
+          process.env.VUE_APP_API_URL ||
+          (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1"
+            ? "http://127.0.0.1:5000"
+            : `${window.location.protocol}//${window.location.hostname}:5000`);
+
+        const response = await axios.get(`${API_BASE_URL}/api/auth/config`);
+        if (response.data.success) {
+          const config = response.data.config;
+          if (
+            !config.openai_api_key ||
+            !config.openai_base_url ||
+            !config.openai_model
+          ) {
+            try {
+              await this.$confirm(
+                "使用智能问答功能需要配置 OpenAI API（API Key、Base URL、Model），是否现在配置？",
+                "需要配置",
+                {
+                  confirmButtonText: "去配置",
+                  cancelButtonText: "取消",
+                  type: "warning",
+                }
+              );
+              // 跳转到首页配置
+              this.$router.push({ path: "/", query: { config: "true" } });
+              return false;
+            } catch {
+              return false;
+            }
+          }
+        }
+        return true;
+      } catch (error) {
+        console.error("检查配置失败:", error);
+        return true; // 如果检查失败，允许继续
+      }
+    },
+
     async submitRAGQuery() {
       if (!this.ragQuestion.trim()) {
         ElMessage.warning("请输入问题");
@@ -1718,6 +1762,11 @@ export default {
       // 如果是单篇论文查询，需要文档ID
       if (this.ragQueryMode === "single_paper" && !this.documentId) {
         ElMessage.error("缺少文档ID，无法查询单篇论文");
+        return;
+      }
+
+      // 检查OpenAI配置
+      if (!(await this.checkOpenAIConfig())) {
         return;
       }
 

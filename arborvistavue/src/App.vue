@@ -38,9 +38,24 @@
 
         <!-- 用户信息区域 -->
         <div class="user-section">
-          <div class="user-avatar">
-            <el-icon><User /></el-icon>
-          </div>
+          <el-dropdown @command="handleUserCommand" trigger="click">
+            <div class="user-avatar">
+              <el-icon><User /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item disabled>
+                  <span class="user-info-text">{{ currentUsername }}</span>
+                </el-dropdown-item>
+                <el-dropdown-item divided command="logout">
+                  <span style="display: flex; align-items: center; gap: 8px">
+                    <el-icon><Close /></el-icon>
+                    退出登录
+                  </span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </header>
@@ -78,7 +93,16 @@
 </template>
 
 <script>
-import { Document, House, Collection, User } from "@element-plus/icons-vue";
+import {
+  Document,
+  House,
+  Collection,
+  User,
+  Close,
+} from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import axios from "axios";
+import { getApiBaseUrl } from "@/config/api";
 
 export default {
   name: "App",
@@ -87,6 +111,58 @@ export default {
     House,
     Collection,
     User,
+    Close,
+  },
+  data() {
+    return {
+      currentUsername: "",
+    };
+  },
+  mounted() {
+    this.loadUserInfo();
+  },
+  methods: {
+    loadUserInfo() {
+      const userStr = localStorage.getItem("user");
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          this.currentUsername = user.username || "用户";
+        } catch (e) {
+          console.error("解析用户信息失败:", e);
+        }
+      }
+    },
+    async handleUserCommand(command) {
+      if (command === "logout") {
+        try {
+          await ElMessageBox.confirm("确定要退出登录吗？", "提示", {
+            confirmButtonText: "确定",
+            cancelButtonText: "取消",
+            type: "warning",
+          });
+
+          // 调用登出API
+          const API_BASE_URL = getApiBaseUrl();
+          try {
+            await axios.post(`${API_BASE_URL}/api/auth/logout`);
+          } catch (e) {
+            console.error("登出API调用失败:", e);
+          }
+
+          // 清除本地存储
+          localStorage.removeItem("user");
+          localStorage.removeItem("user_id");
+          this.currentUsername = "";
+
+          ElMessage.success("已退出登录");
+          // 跳转到登录页
+          this.$router.push("/login");
+        } catch (e) {
+          // 用户取消
+        }
+      }
+    },
   },
 };
 </script>

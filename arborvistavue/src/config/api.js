@@ -2,7 +2,7 @@
 import axios from "axios";
 
 // 获取当前页面的主机地址，支持网络访问
-const getApiBaseUrl = () => {
+export const getApiBaseUrl = () => {
   // 优先使用环境变量
   if (process.env.VUE_APP_API_URL) {
     return process.env.VUE_APP_API_URL;
@@ -22,6 +22,39 @@ const getApiBaseUrl = () => {
 };
 
 const API_BASE_URL = getApiBaseUrl();
+
+// 配置axios拦截器，自动添加用户ID到请求头
+axios.interceptors.request.use(
+  (config) => {
+    const user_id = localStorage.getItem("user_id");
+    if (user_id) {
+      config.headers["X-User-ID"] = user_id;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// 响应拦截器，处理401未授权
+axios.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // 清除本地存储的用户信息
+      localStorage.removeItem("user");
+      localStorage.removeItem("user_id");
+      // 跳转到登录页
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const API_ENDPOINTS = {
   UPLOAD: `${API_BASE_URL}/api/upload`, // 统一上传接口，支持单个或多个文件
