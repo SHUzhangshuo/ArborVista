@@ -4,98 +4,366 @@ import zipfile
 import time
 import uuid
 import shutil
+import subprocess
 from urllib.parse import urlparse
 from pathlib import Path
 
 class MinerUAPI:
-    """MinerU API客户端"""
+    """MinerU API客户端 - 支持在线API和本地调用"""
     
-    def __init__(self, token, base_url="https://mineru.net/api/v4"):
-        self.token = token
-        self.base_url = base_url
-        self.headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {token}"
-        }
+    def __init__(self, token=None, base_url="https://mineru.net/api/v4", use_local=False, local_url="http://127.0.0.1:30000"):
+        """
+        初始化MinerU客户端
         
-        # 配置请求会话，禁用代理
-        self.session = requests.Session()
-        self.session.proxies = {
-            'http': None,
-            'https': None
-        }
-        self.session.verify = True
-        self.session.timeout = 30
+        Args:
+            token: MinerU API token (在线模式需要)
+            base_url: MinerU API base URL (默认: https://mineru.net/api/v4)
+            use_local: 是否使用本地vLLM后端 (默认: False)
+            local_url: 本地vLLM后端URL (默认: http://127.0.0.1:30000)
+        """
+        self.use_local = use_local
+        self.local_url = local_url
+        
+        if not use_local:
+            # Online mode
+            self.token = token or os.environ.get("MINERU_API_TOKEN")
+            if not self.token:
+                raise ValueError(
+                    "MINERU_API_TOKEN is required for online mode. "
+                    "Set it as environment variable or pass as parameter."
+                )
+            self.base_url = base_url
+            self.headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.token}"
+            }
+            
+            # 配置请求会话，禁用代理
+            self.session = requests.Session()
+            self.session.proxies = {
+                'http': None,
+                'https': None
+            }
+            self.session.verify = True
+            self.session.timeout = 30
+        else:
+            # Local mode - check if mineru command is available
+            try:
+                result = subprocess.run(
+                    ["mineru", "-v"],
+                    capture_output=True,
+                    check=True,
+                    timeout=10,
+                    text=True
+                )
+            except FileNotFoundError:
+                raise ValueError(
+                    "MinerU command not found. Please install MinerU first:\n"
+                    "  1. Install uv: pip install uv\n"
+                    "  2. Create conda environment: conda create -n mineru python=3.12 -y\n"
+                    "  3. Activate environment: conda activate mineru\n"
+                    "  4. Install MinerU: uv pip install mineru"
+                )
+            except subprocess.TimeoutExpired:
+                # If version check times out, still allow initialization
+                # The actual command will fail later if mineru is not available
+                pass
+            except subprocess.CalledProcessError:
+                raise ValueError(
+                    "MinerU command check failed. Please ensure MinerU is properly installed."
+                )
     
     def process_files_batch(self, file_paths, output_dir, batch_index=0, max_files_per_batch=200, language="en", is_ocr=True, enable_formula=True, enable_table=True, layout_model="doclayout_yolo"):
-        """批量处理文件 - 严格按照test_input.py和test_output.py的逻辑"""
-        try:
-            print(f"🚀 开始批量处理 {len(file_paths)} 个文件")
-            
-            # 第一步：生成批次ID（对应test_input.py）
-            batch_result = self.generate_batch_idx(
-                file_paths=file_paths,
-                batch_index=batch_index,
-                max_files_per_batch=max_files_per_batch,
-                language=language,
-                is_ocr=is_ocr,
-                enable_formula=enable_formula,
-                enable_table=enable_table,
-                layout_model=layout_model
+        """批量处理文件 - 支持在线API和本地调用"""
+        if self.use_local:
+            # Local mode: process files sequentially
+            return self._process_local_batch(
+                file_paths, output_dir, is_ocr, enable_formula,
+                enable_table, language, layout_model
             )
-            
-            if not batch_result['success']:
-                return batch_result
-            
-            batch_id = batch_result['batch_id']
-            print(f"✅ 批次ID生成成功: {batch_id}")
-            
-            # 第二步：等待处理完成 - 轮询检查状态
-            print("⏳ 等待处理完成...")
-            max_wait_time = 300  # 最大等待5分钟
-            check_interval = 10   # 每10秒检查一次
-            start_time = time.time()
-            
-            while time.time() - start_time < max_wait_time:
-                # 检查批次状态
-                status_result = self.check_batch_status(batch_id)
-                if not status_result['success']:
-                    print(f"❌ 检查批次状态失败: {status_result['error']}")
-                    time.sleep(check_interval)
-                    continue
+        else:
+            # Online mode - 严格按照test_input.py和test_output.py的逻辑
+            try:
+                print(f"🚀 开始批量处理 {len(file_paths)} 个文件")
                 
-                if status_result['is_complete']:
-                    print(f"✅ 批次处理完成！成功: {status_result['completed_files']}/{status_result['total_files']}")
-                    break
+                # 第一步：生成批次ID（对应test_input.py）
+                batch_result = self.generate_batch_idx(
+                    file_paths=file_paths,
+                    batch_index=batch_index,
+                    max_files_per_batch=max_files_per_batch,
+                    language=language,
+                    is_ocr=is_ocr,
+                    enable_formula=enable_formula,
+                    enable_table=enable_table,
+                    layout_model=layout_model
+                )
+                
+                if not batch_result['success']:
+                    return batch_result
+                
+                batch_id = batch_result['batch_id']
+                print(f"✅ 批次ID生成成功: {batch_id}")
+                
+                # 第二步：等待处理完成 - 轮询检查状态
+                print("⏳ 等待处理完成...")
+                max_wait_time = 300  # 最大等待5分钟
+                check_interval = 10   # 每10秒检查一次
+                start_time = time.time()
+                
+                while time.time() - start_time < max_wait_time:
+                    # 检查批次状态
+                    status_result = self.check_batch_status(batch_id)
+                    if not status_result['success']:
+                        print(f"❌ 检查批次状态失败: {status_result['error']}")
+                        time.sleep(check_interval)
+                        continue
+                    
+                    if status_result['is_complete']:
+                        print(f"✅ 批次处理完成！成功: {status_result['completed_files']}/{status_result['total_files']}")
+                        break
+                    else:
+                        print(f"⏳ 批次处理中: {status_result['completed_files']}/{status_result['total_files']} (已等待 {int(time.time() - start_time)} 秒)")
+                        time.sleep(check_interval)
                 else:
-                    print(f"⏳ 批次处理中: {status_result['completed_files']}/{status_result['total_files']} (已等待 {int(time.time() - start_time)} 秒)")
-                    time.sleep(check_interval)
-            else:
+                    return {
+                        'success': False,
+                        'error': f'批次处理超时，等待时间超过{max_wait_time}秒'
+                    }
+                
+                # 第三步：下载结果（对应test_output.py）
+                download_result = self.download_by_batch_idx(batch_id, output_dir)
+                
+                if download_result['success']:
+                    return {
+                        'success': True,
+                        'batch_id': batch_id,
+                        'processed_files': download_result['processed_files'],
+                        'success_count': download_result['success_count'],
+                        'total_count': download_result['total_count'],
+                        'output_dir': output_dir,
+                        'message': f'批量处理完成，成功: {download_result["success_count"]}/{download_result["total_count"]}'
+                    }
+                else:
+                    return download_result
+                    
+            except Exception as e:
                 return {
                     'success': False,
-                    'error': f'批次处理超时，等待时间超过{max_wait_time}秒'
+                    'error': f'批量处理失败: {str(e)}'
                 }
+    
+    def _process_local_batch(
+        self,
+        file_paths,
+        output_dir,
+        is_ocr=True,
+        enable_formula=True,
+        enable_table=True,
+        language="en",
+        layout_model="doclayout_yolo"
+    ):
+        """使用本地MinerU vLLM后端批量处理文件"""
+        results = []
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        print(f"🚀 开始本地批量处理 {len(file_paths)} 个文件")
+        
+        for idx, file_path in enumerate(file_paths, 1):
+            print(f"处理文件 {idx}/{len(file_paths)}: {Path(file_path).name}")
+            result = self._process_local(
+                Path(file_path),
+                output_path,
+                is_ocr,
+                enable_formula,
+                enable_table,
+                language,
+                layout_model
+            )
             
-            # 第三步：下载结果（对应test_output.py）
-            download_result = self.download_by_batch_idx(batch_id, output_dir)
-            
-            if download_result['success']:
-                return {
-                    'success': True,
-                    'batch_id': batch_id,
-                    'processed_files': download_result['processed_files'],
-                    'success_count': download_result['success_count'],
-                    'total_count': download_result['total_count'],
-                    'output_dir': output_dir,
-                    'message': f'批量处理完成，成功: {download_result["success_count"]}/{download_result["total_count"]}'
-                }
-            else:
-                return download_result
+            # 转换结果格式以匹配API模式的返回格式
+            if result['success']:
+                # 从输出路径中提取data_id（使用文件名作为data_id）
+                file_id = Path(file_path).stem
+                data_id = f"{file_id}_b1"
                 
+                results.append({
+                    'original_name': Path(file_path).name,
+                    'data_id': data_id,
+                    'output_dir': str(result.get('output_dir', output_path / data_id)),
+                    'success': True
+                })
+            else:
+                results.append({
+                    'original_name': Path(file_path).name,
+                    'data_id': '',
+                    'output_dir': None,
+                    'success': False,
+                    'error': result.get('error', '处理失败')
+                })
+        
+        success_count = sum(1 for r in results if r['success'])
+        return {
+            'success': success_count > 0,
+            'processed_files': results,
+            'success_count': success_count,
+            'total_count': len(results),
+            'output_dir': str(output_path),
+            'message': f'批量处理完成，成功: {success_count}/{len(results)}'
+        }
+    
+    def _process_local(
+        self,
+        input_path: Path,
+        output_path: Path,
+        is_ocr: bool = True,
+        enable_formula: bool = True,
+        enable_table: bool = True,
+        language: str = "en",
+        layout_model: str = "doclayout_yolo"
+    ):
+        """使用本地MinerU vLLM后端处理单个文件"""
+        try:
+            # Build mineru command
+            cmd = [
+                "mineru",
+                "-p", str(input_path),
+                "-o", str(output_path),
+                "-b", "vlm-http-client",
+                "-u", self.local_url
+            ]
+            
+            # Execute command
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=600  # 10 minutes timeout
+            )
+            
+            if result.returncode == 0:
+                # Find output markdown file (mineru creates files in subdirectories like output/1/vlm/)
+                md_files = list(output_path.rglob("*.md"))
+                if md_files:
+                    # Sort by modification time, get the most recent one
+                    md_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                    md_file = md_files[0]
+                    
+                    # Create a structured output directory for this file
+                    file_id = input_path.stem
+                    data_id = f"{file_id}_b1"
+                    file_output_dir = output_path / data_id
+                    file_output_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Copy markdown file to structured directory
+                    target_md = file_output_dir / "full.md"
+                    shutil.copy2(md_file, target_md)
+                    
+                    # Copy images if they exist
+                    images_dir = file_output_dir / "images"
+                    images_dir.mkdir(exist_ok=True)
+                    
+                    # Find images in the same directory as the markdown file
+                    md_dir = md_file.parent
+                    for img_file in md_dir.glob("*.jpg"):
+                        shutil.copy2(img_file, images_dir / img_file.name)
+                    for img_file in md_dir.glob("*.png"):
+                        shutil.copy2(img_file, images_dir / img_file.name)
+                    
+                    return {
+                        'success': True,
+                        'input_path': str(input_path),
+                        'output_dir': str(file_output_dir),
+                        'md_file': str(target_md),
+                        'message': 'File processed successfully'
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'error': f'No markdown file found in output directory: {output_path}. '
+                                f'Command stdout: {result.stdout[:200] if result.stdout else "None"}'
+                    }
+            else:
+                error_msg = result.stderr if result.stderr else result.stdout
+                return {
+                    'success': False,
+                    'error': f'MinerU command failed (return code: {result.returncode}). '
+                            f'Error: {error_msg}'
+                }
+        except subprocess.TimeoutExpired:
+            return {
+                'success': False,
+                'error': 'Processing timeout (exceeded 10 minutes)'
+            }
         except Exception as e:
             return {
                 'success': False,
-                'error': f'批量处理失败: {str(e)}'
+                'error': f'Processing failed: {str(e)}'
+            }
+    
+    def submit_task(self, file_path, is_ocr=True, enable_formula=False, enable_table=True, language="en", layout_model="doclayout_yolo"):
+        """提交单个文件处理任务到在线API"""
+        if self.use_local:
+            return {
+                'success': False,
+                'error': 'submit_task is only available in online mode. Use process_file instead.'
+            }
+        
+        try:
+            file_path_obj = Path(file_path)
+            if not file_path_obj.exists():
+                return {
+                    'success': False,
+                    'error': f'File not found: {file_path}'
+                }
+            
+            # Get upload URL
+            response = self.session.post(
+                f"{self.base_url}/file-urls",
+                headers=self.headers,
+                json={
+                    "name": file_path_obj.name,
+                    "is_ocr": is_ocr,
+                    "enable_formula": enable_formula,
+                    "enable_table": enable_table,
+                    "language": language,
+                    "layout_model": layout_model
+                }
+            )
+            
+            if response.status_code != 200:
+                return {
+                    'success': False,
+                    'error': f'Request failed with status {response.status_code}'
+                }
+            
+            result = response.json()
+            if result.get("code") != 0:
+                return {
+                    'success': False,
+                    'error': result.get("msg", "Unknown error")
+                }
+            
+            # Upload file
+            upload_url = result["data"]["file_url"]
+            task_id = result["data"]["task_id"]
+            
+            with open(file_path_obj, 'rb') as f:
+                upload_response = self.session.put(upload_url, data=f)
+                if upload_response.status_code not in [200, 201]:
+                    return {
+                        'success': False,
+                        'error': f'Upload failed with status {upload_response.status_code}'
+                    }
+            
+            return {
+                'success': True,
+                'task_id': task_id
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Submit task failed: {str(e)}'
             }
     
     def check_task_status(self, task_id):
@@ -943,57 +1211,70 @@ class MinerUAPI:
                 'error': f'利用批次ID下载失败: {str(e)}'
             }
 
-    def process_file(self, file_path, output_dir, is_ocr=True, enable_formula=False, max_wait_time=300):
-        """处理文件的完整流程"""
-        try:
-            # 1. 提交任务
-            print("提交文件处理任务...")
-            submit_result = self.submit_task(file_path, is_ocr, enable_formula)
-            if not submit_result['success']:
-                return submit_result
-            
-            task_id = submit_result['task_id']
-            print(f"任务ID: {task_id}")
-            
-            # 2. 轮询任务状态
-            print("等待任务完成...")
-            start_time = time.time()
-            
-            while time.time() - start_time < max_wait_time:
-                status_result = self.check_task_status(task_id)
-                if not status_result['success']:
-                    return status_result
+    def process_file(self, file_path, output_dir, is_ocr=True, enable_formula=False, enable_table=True, language="en", layout_model="doclayout_yolo", max_wait_time=300):
+        """处理文件的完整流程 - 支持在线API和本地调用"""
+        if self.use_local:
+            # Local mode
+            return self._process_local(
+                Path(file_path),
+                Path(output_dir),
+                is_ocr,
+                enable_formula,
+                enable_table,
+                language,
+                layout_model
+            )
+        else:
+            # Online mode
+            try:
+                # 1. 提交任务
+                print("提交文件处理任务...")
+                submit_result = self.submit_task(file_path, is_ocr, enable_formula)
+                if not submit_result['success']:
+                    return submit_result
                 
-                state = status_result['state']
-                print(f"任务状态: {state}")
+                task_id = submit_result['task_id']
+                print(f"任务ID: {task_id}")
                 
-                if state == 'done':
-                    zip_url = status_result['zip_url']
-                    if zip_url:
-                        # 3. 下载并解压结果
-                        print("任务完成，开始下载结果...")
-                        return self.download_and_extract_result(zip_url, output_dir)
-                    else:
+                # 2. 轮询任务状态
+                print("等待任务完成...")
+                start_time = time.time()
+                
+                while time.time() - start_time < max_wait_time:
+                    status_result = self.check_task_status(task_id)
+                    if not status_result['success']:
+                        return status_result
+                    
+                    state = status_result['state']
+                    print(f"任务状态: {state}")
+                    
+                    if state == 'done':
+                        zip_url = status_result['zip_url']
+                        if zip_url:
+                            # 3. 下载并解压结果
+                            print("任务完成，开始下载结果...")
+                            return self.download_and_extract_result(zip_url, output_dir)
+                        else:
+                            return {
+                                'success': False,
+                                'error': '任务完成但未找到下载链接'
+                            }
+                    elif state == 'failed':
                         return {
                             'success': False,
-                            'error': '任务完成但未找到下载链接'
+                            'error': f'任务失败: {status_result.get("error_msg", "未知错误")}'
                         }
-                elif state == 'failed':
-                    return {
-                        'success': False,
-                        'error': f'任务失败: {status_result.get("error_msg", "未知错误")}'
-                    }
+                    
+                    # 等待5秒后再次检查
+                    time.sleep(5)
                 
-                # 等待5秒后再次检查
-                time.sleep(5)
-            
-            return {
-                'success': False,
-                'error': f'任务超时，等待时间超过{max_wait_time}秒'
-            }
-            
-        except Exception as e:
-            return {
-                'success': False,
-                'error': f'处理文件失败: {str(e)}'
-            }
+                return {
+                    'success': False,
+                    'error': f'任务超时，等待时间超过{max_wait_time}秒'
+                }
+                
+            except Exception as e:
+                return {
+                    'success': False,
+                    'error': f'处理文件失败: {str(e)}'
+                }

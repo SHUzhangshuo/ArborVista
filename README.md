@@ -38,6 +38,7 @@
 - **🌍 多语言支持** - 支持中文、英文、韩文、日文等多种语言
 - **📊 结构化输出** - 生成清晰的Markdown格式文档
 - **☁️ 云端处理** - 基于MinerU API，无需本地复杂配置
+- **💻 本地调用** - 支持本地MinerU vLLM后端，可完全离线使用
 - **🤖 RAG智能问答** - 基于向量检索的文档问答系统，支持单篇论文和整个文档库查询
 - **📝 查询日志** - 自动记录所有RAG查询，便于追踪和分析
 - **📱 移动友好** - 响应式设计，支持各种设备访问
@@ -111,9 +112,29 @@ cp env.example .env
 ```
 
 2. 编辑 `.env` 文件，填入实际值：
+
+**方式A：使用在线API（默认）**
 ```bash
-# MinerU API配置（必需）
+# MinerU API配置（在线模式必需）
 MINERU_API_TOKEN=your-mineru-api-token-here
+MINERU_USE_LOCAL=false
+
+# RAG/LLM配置（RAG功能必需）
+OPENAI_API_KEY=your-openai-api-key-here
+OPENAI_BASE_URL=http://your-api-server-url/v1/
+OPENAI_MODEL=gpt-5
+OPENAI_TEMPERATURE=0.7
+
+# Flask配置（可选）
+SECRET_KEY=your-secret-key-here
+FLASK_ENV=development
+```
+
+**方式B：使用本地调用（离线模式）**
+```bash
+# MinerU本地配置（本地模式必需）
+MINERU_USE_LOCAL=true
+MINERU_LOCAL_URL=http://127.0.0.1:30000
 
 # RAG/LLM配置（RAG功能必需）
 OPENAI_API_KEY=your-openai-api-key-here
@@ -130,8 +151,13 @@ FLASK_ENV=development
 
 **Windows PowerShell:**
 ```powershell
-# MinerU API Token
+# 方式A：使用在线API（默认）
 $env:MINERU_API_TOKEN="your_token_here"
+$env:MINERU_USE_LOCAL="false"
+
+# 方式B：使用本地调用
+$env:MINERU_USE_LOCAL="true"
+$env:MINERU_LOCAL_URL="http://127.0.0.1:30000"
 
 # RAG功能配置
 $env:OPENAI_API_KEY="your_openai_api_key_here"
@@ -142,7 +168,14 @@ $env:OPENAI_TEMPERATURE="0.7"
 
 **Windows CMD:**
 ```cmd
+REM 方式A：使用在线API（默认）
 set MINERU_API_TOKEN=your_token_here
+set MINERU_USE_LOCAL=false
+
+REM 方式B：使用本地调用
+set MINERU_USE_LOCAL=true
+set MINERU_LOCAL_URL=http://127.0.0.1:30000
+
 set OPENAI_API_KEY=your_openai_api_key_here
 set OPENAI_BASE_URL=http://your-api-server-url/v1/
 set OPENAI_MODEL=gpt-5
@@ -151,7 +184,14 @@ set OPENAI_TEMPERATURE=0.7
 
 **Linux/Mac:**
 ```bash
+# 方式A：使用在线API（默认）
 export MINERU_API_TOKEN="your_token_here"
+export MINERU_USE_LOCAL="false"
+
+# 方式B：使用本地调用
+export MINERU_USE_LOCAL="true"
+export MINERU_LOCAL_URL="http://127.0.0.1:30000"
+
 export OPENAI_API_KEY="your_openai_api_key_here"
 export OPENAI_BASE_URL="http://your-api-server-url/v1/"
 export OPENAI_MODEL="gpt-5"
@@ -176,14 +216,20 @@ source ~/.bashrc
 
 **📋 必需的环境变量说明**
 
-| 环境变量 | 说明 | 是否必需 | 获取方式 |
-|---------|------|---------|---------|
-| `MINERU_API_TOKEN` | MinerU API访问令牌 | ✅ 必需 | 访问 [MinerU官网](https://mineru.net) 注册获取 |
-| `OPENAI_API_KEY` | OpenAI API密钥 | ✅ RAG功能必需 | 访问 OpenAI 或你的API服务提供商获取 |
-| `OPENAI_BASE_URL` | LLM API基础URL | ✅ RAG功能必需 | 你的API服务地址，例如：`http://your-server/v1/` |
-| `OPENAI_MODEL` | 模型名称 | ⚪ 可选 | 默认：`gpt-5` |
-| `OPENAI_TEMPERATURE` | 模型温度参数 | ⚪ 可选 | 默认：`0.7`，范围：0.0-2.0 |
-| `SECRET_KEY` | Flask密钥 | ⚪ 可选 | 用于生产环境，建议使用随机字符串 |
+| 环境变量 | 说明 | 是否必需 | 默认值 | 获取方式 |
+|---------|------|---------|--------|---------|
+| `MINERU_API_TOKEN` | MinerU API访问令牌 | ⚠️ 在线模式必需 | 无 | 访问 [MinerU官网](https://mineru.net) 注册获取 |
+| `MINERU_USE_LOCAL` | 是否使用本地调用 | ⚪ 可选 | `false` | 设置为 `true` 启用本地模式 |
+| `MINERU_LOCAL_URL` | 本地vLLM后端URL | ⚠️ 本地模式必需 | `http://127.0.0.1:30000` | 本地MinerU vLLM服务地址 |
+| `OPENAI_API_KEY` | OpenAI API密钥 | ✅ RAG功能必需 | 无 | 访问 OpenAI 或你的API服务提供商获取 |
+| `OPENAI_BASE_URL` | LLM API基础URL | ✅ RAG功能必需 | 无 | 你的API服务地址，例如：`http://your-server/v1/` |
+| `OPENAI_MODEL` | 模型名称 | ⚪ 可选 | `gpt-5` | 使用的LLM模型名称 |
+| `OPENAI_TEMPERATURE` | 模型温度参数 | ⚪ 可选 | `0.7` | 范围：0.0-2.0 |
+| `SECRET_KEY` | Flask密钥 | ⚪ 可选 | `dev-secret-key-change-in-production` | 用于生产环境，建议使用随机字符串 |
+
+**💡 使用模式说明：**
+- **在线模式**（默认）：需要设置 `MINERU_API_TOKEN`，`MINERU_USE_LOCAL=false` 或不设置
+- **本地模式**：需要设置 `MINERU_USE_LOCAL=true` 和 `MINERU_LOCAL_URL`，需要先安装并启动本地MinerU vLLM服务
 
 #### 4️⃣ 验证环境变量配置
 
@@ -408,13 +454,97 @@ ArborVista/
 
 | 环境变量 | 说明 | 是否必需 | 默认值 |
 |---------|------|---------|--------|
-| `MINERU_API_TOKEN` | MinerU API访问令牌 | ✅ 必需 | 无 |
+| `MINERU_API_TOKEN` | MinerU API访问令牌 | ⚠️ 在线模式必需 | 无 |
+| `MINERU_USE_LOCAL` | 是否使用本地调用 | ⚪ 可选 | `false` |
+| `MINERU_LOCAL_URL` | 本地vLLM后端URL | ⚠️ 本地模式必需 | `http://127.0.0.1:30000` |
 | `OPENAI_API_KEY` | OpenAI API密钥（RAG功能） | ✅ RAG功能必需 | 无 |
 | `OPENAI_BASE_URL` | LLM API基础URL | ✅ RAG功能必需 | 无 |
 | `OPENAI_MODEL` | 模型名称 | ⚪ 可选 | `gpt-5` |
 | `OPENAI_TEMPERATURE` | 模型温度参数（0.0-2.0） | ⚪ 可选 | `0.7` |
 | `SECRET_KEY` | Flask应用密钥 | ⚪ 可选 | `dev-secret-key-change-in-production` |
 | `FLASK_ENV` | Flask环境模式 | ⚪ 可选 | `development` |
+
+### 💻 本地调用配置
+
+ArborVista 支持两种 MinerU 调用方式：
+
+#### 🌐 在线API模式（默认）
+
+使用 MinerU 云端API服务，无需本地安装：
+
+```bash
+# 设置环境变量
+export MINERU_API_TOKEN="your-api-token"
+export MINERU_USE_LOCAL="false"  # 或不设置，默认为false
+```
+
+**优点：**
+- ✅ 无需本地安装 MinerU
+- ✅ 无需配置本地服务
+- ✅ 自动获得 MinerU 最新功能更新
+
+**缺点：**
+- ❌ 需要网络连接
+- ❌ 需要 API Token
+- ❌ 可能有使用配额限制
+
+#### 💻 本地调用模式
+
+使用本地 MinerU vLLM 后端，完全离线使用：
+
+**1. 安装 MinerU（如果尚未安装）**
+
+```bash
+# 首先安装 uv（如果尚未安装）
+pip install uv
+
+# 使用 conda 创建环境（推荐）
+conda create -n mineru python=3.12 -y
+conda activate mineru
+
+# 或使用 venv（可选）
+python -m venv mineru_env
+# Windows
+mineru_env\Scripts\activate
+# Linux/Mac
+source mineru_env/bin/activate
+
+# 安装 MinerU
+uv pip install mineru
+
+# 验证安装
+mineru -v
+```
+
+**2. 启动本地 vLLM 服务**
+
+```bash
+# 启动 MinerU vLLM 后端（默认端口 30000）
+# 具体启动命令请参考 MinerU 官方文档
+```
+
+**3. 配置环境变量**
+
+```bash
+# 设置本地模式
+export MINERU_USE_LOCAL="true"
+export MINERU_LOCAL_URL="http://127.0.0.1:30000"  # 根据实际服务地址调整
+```
+
+**优点：**
+- ✅ 完全离线使用
+- ✅ 无需 API Token
+- ✅ 无使用配额限制
+- ✅ 数据隐私更好
+
+**缺点：**
+- ❌ 需要本地安装 MinerU
+- ❌ 需要配置和启动本地服务
+- ❌ 需要本地计算资源（GPU推荐）
+
+**💡 切换模式：**
+
+只需修改 `MINERU_USE_LOCAL` 环境变量即可在两种模式间切换，无需修改代码。
 
 ### 🎛️ 应用配置
 
@@ -525,54 +655,164 @@ GET /api/libraries/{library_id}/vector_store_status
 <details>
 <summary><strong>Q: 启动时提示 MINERU_API_TOKEN 未设置</strong></summary>
 
-**A**: 确保已正确设置环境变量
+**A**: 有两种解决方案
 
-**方式一：使用 .env 文件（推荐）**
+**方案一：使用在线API模式（需要API Token）**
+
 ```bash
 # 1. 复制示例文件
 cp env.example .env
 
 # 2. 编辑 .env 文件，填入实际的 MINERU_API_TOKEN
 # MINERU_API_TOKEN=your-actual-token-here
+# MINERU_USE_LOCAL=false
 ```
 
-**方式二：临时设置（当前终端）**
+**方案二：使用本地调用模式（无需API Token）**
+
 ```bash
-# Windows PowerShell
-$env:MINERU_API_TOKEN="your_token_here"
+# 1. 确保已安装 MinerU
+# 如果尚未安装，先安装 uv
+pip install uv
 
-# Windows CMD
-set MINERU_API_TOKEN=your_token_here
+# 创建环境并安装 MinerU
+conda create -n mineru python=3.12 -y
+conda activate mineru
+uv pip install mineru
 
-# Linux/Mac
-export MINERU_API_TOKEN="your_token_here"
+# 验证安装
+mineru -v
+
+# 2. 启动本地 vLLM 服务（参考 MinerU 文档）
+
+# 3. 设置环境变量
+export MINERU_USE_LOCAL="true"
+export MINERU_LOCAL_URL="http://127.0.0.1:30000"
 ```
 
 **检查环境变量是否设置成功**
 ```bash
 # Windows PowerShell
-echo $env:MINERU_API_TOKEN
+echo $env:MINERU_USE_LOCAL
+echo $env:MINERU_API_TOKEN  # 在线模式需要
+echo $env:MINERU_LOCAL_URL  # 本地模式需要
 
 # Windows CMD
+echo %MINERU_USE_LOCAL%
 echo %MINERU_API_TOKEN%
+echo %MINERU_LOCAL_URL%
 
 # Linux/Mac
+echo $MINERU_USE_LOCAL
 echo $MINERU_API_TOKEN
+echo $MINERU_LOCAL_URL
 ```
 
 </details>
 
 <details>
-<summary><strong>Q: API连接失败</strong></summary>
+<summary><strong>Q: 如何使用本地调用模式？</strong></summary>
 
-**A**: 检查网络连接和Token有效性
+**A**: 按照以下步骤配置本地调用：
+
+**1. 安装 MinerU**
 
 ```bash
-# 运行API测试
-python test_api.py
+# 首先安装 uv（如果尚未安装）
+pip install uv
 
+# 创建 conda 环境（推荐）
+conda create -n mineru python=3.12 -y
+conda activate mineru
+
+# 或使用 venv（可选）
+python -m venv mineru_env
+# Windows
+mineru_env\Scripts\activate
+# Linux/Mac
+source mineru_env/bin/activate
+
+# 安装 MinerU
+uv pip install mineru
+
+# 验证安装
+mineru -v
+```
+
+**2. 启动本地 vLLM 服务**
+
+根据 MinerU 官方文档启动 vLLM 后端服务（默认端口 30000）
+
+**3. 配置环境变量**
+
+```bash
+# 方式一：使用 .env 文件
+# 编辑 .env 文件，添加：
+MINERU_USE_LOCAL=true
+MINERU_LOCAL_URL=http://127.0.0.1:30000
+
+# 方式二：临时设置
+export MINERU_USE_LOCAL="true"
+export MINERU_LOCAL_URL="http://127.0.0.1:30000"
+```
+
+**4. 验证配置**
+
+启动应用后，查看控制台输出：
+- ✅ 如果看到 "MinerU 本地模式已启用"，说明配置成功
+- ❌ 如果看到 "MinerU command not found"，说明 MinerU 未正确安装
+
+**常见问题：**
+- **MinerU command not found**: 
+  - 确保已安装 uv: `pip install uv`
+  - 确保已安装 MinerU: `uv pip install mineru`
+  - 确保在正确的 conda/venv 环境中
+  - 验证安装: `mineru -v`
+- **连接失败**: 检查本地 vLLM 服务是否已启动，端口是否正确
+- **处理超时**: 检查本地服务资源是否充足（GPU/内存）
+
+</details>
+
+<details>
+<summary><strong>Q: API连接失败 / 本地调用失败</strong></summary>
+
+**A**: 根据使用的模式进行排查
+
+**在线API模式：**
+```bash
 # 检查网络连接
 ping mineru.net
+
+# 验证 Token 有效性
+# 访问 MinerU 官网检查 Token 状态
+
+# 检查环境变量
+echo $MINERU_API_TOKEN
+echo $MINERU_USE_LOCAL  # 应该为 false 或不设置
+```
+
+**本地调用模式：**
+```bash
+# 1. 检查 MinerU 是否安装
+# 如果使用 conda 环境
+conda activate mineru
+# 或如果使用 venv
+# source mineru_env/bin/activate  # Linux/Mac
+# mineru_env\Scripts\activate     # Windows
+
+mineru -v
+
+# 2. 检查本地服务是否运行
+# 检查端口 30000 是否被占用
+netstat -ano | findstr :30000  # Windows
+lsof -i :30000  # Linux/Mac
+
+# 3. 检查环境变量
+echo $MINERU_USE_LOCAL  # 应该为 true
+echo $MINERU_LOCAL_URL  # 应该指向正确的服务地址
+
+# 4. 测试本地服务连接
+curl http://127.0.0.1:30000/health  # 如果服务提供健康检查接口
 ```
 
 </details>

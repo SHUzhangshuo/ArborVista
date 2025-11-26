@@ -25,6 +25,8 @@ class Config:
     
     # MinerU API配置
     MINERU_API_TOKEN = os.environ.get('MINERU_API_TOKEN')
+    MINERU_USE_LOCAL = os.environ.get('MINERU_USE_LOCAL', 'false').lower() == 'true'
+    MINERU_LOCAL_URL = os.environ.get('MINERU_LOCAL_URL', 'http://127.0.0.1:30000')
     
     # RAG/LLM配置
     OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
@@ -52,12 +54,16 @@ class Config:
         app.config['SECRET_KEY'] = cls.SECRET_KEY
         app.config['MAX_CONTENT_LENGTH'] = cls.MAX_CONTENT_LENGTH
         
-        # 检查MinerU API Token
-        if not cls.MINERU_API_TOKEN:
-            print("⚠️ 警告: MINERU_API_TOKEN 环境变量未设置")
-            print("   请在环境变量中设置 MINERU_API_TOKEN")
+        # 检查MinerU配置
+        if cls.MINERU_USE_LOCAL:
+            print("✅ MinerU 本地模式已启用")
+            print(f"   本地URL: {cls.MINERU_LOCAL_URL}")
         else:
-            print("✅ MinerU API Token 已配置")
+            if not cls.MINERU_API_TOKEN:
+                print("⚠️ 警告: MINERU_API_TOKEN 环境变量未设置")
+                print("   请在环境变量中设置 MINERU_API_TOKEN，或设置 MINERU_USE_LOCAL=true 使用本地模式")
+            else:
+                print("✅ MinerU API Token 已配置")
         
         # 检查OpenAI API配置（RAG功能）
         if not cls.OPENAI_API_KEY:

@@ -50,16 +50,29 @@ def process_files_with_mineru_api(file_paths, output_dir, app, is_ocr=True, enab
                 'error': '没有有效的文件可处理'
             }
         
-        # 获取API Token
-        token = app.config.get('MINERU_API_TOKEN')
-        if not token:
+        # 获取配置
+        use_local = app.config.get('MINERU_USE_LOCAL', False)
+        local_url = app.config.get('MINERU_LOCAL_URL', 'http://127.0.0.1:30000')
+        
+        # 创建MinerU客户端（支持API和本地调用）
+        try:
+            if use_local:
+                api_client = MinerUAPI(use_local=True, local_url=local_url)
+                print(f"🚀 MinerU 本地模式: {local_url}")
+            else:
+                token = app.config.get('MINERU_API_TOKEN')
+                if not token:
+                    return {
+                        'success': False,
+                        'error': 'MinerU API Token未配置，请在环境变量中设置MINERU_API_TOKEN，或设置MINERU_USE_LOCAL=true使用本地模式'
+                    }
+                api_client = MinerUAPI(token=token)
+                print(f"🚀 MinerU API 模式")
+        except ValueError as e:
             return {
                 'success': False,
-                'error': 'MinerU API Token未配置，请在环境变量中设置MINERU_API_TOKEN'
+                'error': str(e)
             }
-        
-        # 创建MinerU API客户端
-        api_client = MinerUAPI(token)
         
         print(f"🚀 MinerU API 批量处理配置:")
         print(f"   📁 输入文件: {len(valid_files)} 个")
