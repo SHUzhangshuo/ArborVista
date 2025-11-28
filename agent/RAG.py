@@ -302,20 +302,62 @@ class PaperRAGSystem:
             if not file_dir.is_dir() or file_dir.name == "info.json":
                 continue
             
-            # 查找full.md文件
+            # 查找full.md文件（可能在子目录中）
             md_file = file_dir / "full.md"
+            actual_file_dir = file_dir
+            
+            # 如果当前目录没有full.md，检查子目录
             if not md_file.exists():
-                continue
+                for sub_dir in file_dir.iterdir():
+                    if sub_dir.is_dir():
+                        potential_md = sub_dir / "full.md"
+                        if potential_md.exists():
+                            md_file = potential_md
+                            actual_file_dir = sub_dir
+                            break
+                
+                if not md_file.exists():
+                    continue
             
             # 读取Markdown内容
             try:
                 with open(md_file, 'r', encoding='utf-8') as f:
                     content = f.read()
                 
-                filename = self._extract_filename(file_dir) or "未命名文档"
+                filename = self._extract_filename(actual_file_dir) or "未命名文档"
+                
+                # 从filename_info.json获取正确的file_id，如果没有则从目录名提取
+                file_id = None
+                filename_info_file = actual_file_dir / "filename_info.json"
+                if filename_info_file.exists():
+                    try:
+                        with open(filename_info_file, 'r', encoding='utf-8') as f:
+                            file_info = json.load(f)
+                            file_id = file_info.get('file_id')
+                    except:
+                        pass
+                
+                # 如果无法从filename_info.json获取，从目录名提取
+                if not file_id:
+                    dir_name = file_dir.name
+                    # 如果目录名包含_b1后缀，去掉它
+                    if dir_name.endswith('_b1'):
+                        # 尝试从目录名提取file_id（格式：{文件名}-{file_id} 或 {file_id}_b1）
+                        if '-' in dir_name:
+                            # 格式：{文件名}-{file_id}
+                            file_id = dir_name.rsplit('-', 1)[-1]
+                        else:
+                            # 格式：{file_id}_b1
+                            file_id = dir_name.replace('_b1', '')
+                    else:
+                        # 如果目录名包含-，提取最后一部分作为file_id
+                        if '-' in dir_name:
+                            file_id = dir_name.rsplit('-', 1)[-1]
+                        else:
+                            file_id = dir_name
                 
                 papers.append({
-                    'file_id': file_dir.name,
+                    'file_id': file_id,
                     'library_id': library_id,
                     'library_name': library_info.get('display_name', library_id),
                     'filename': filename,
@@ -323,7 +365,7 @@ class PaperRAGSystem:
                     'path': str(md_file)
                 })
                 
-                print(f"✅ 加载论文: {filename} ({file_dir.name})")
+                print(f"✅ 加载论文: {filename} (file_id: {file_id}, dir: {file_dir.name})")
                 
             except Exception as e:
                 print(f"⚠️ 加载论文失败: {file_dir.name}, 错误: {str(e)}")

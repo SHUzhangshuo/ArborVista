@@ -6,10 +6,11 @@ import traceback
 import time
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, send_from_directory, make_response
+from flask import Flask, request, jsonify, send_from_directory, make_response, session
 from flask_cors import CORS
 from config import config
 from mineru_api import MinerUAPI
+from user_manager import get_user_manager
 import sys
 
 # 添加agent目录到路径
@@ -172,11 +173,14 @@ def create_app(config_name='default'):
         if not key.startswith('_') and not callable(getattr(config_class, key)):
             app.config[key] = getattr(config_class, key)
     
+    # 设置session密钥
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'arborvista-secret-key-change-in-production')
+    
     # 启用CORS，支持内网穿透
     CORS(app, 
          origins="*", 
          supports_credentials=True,
-         allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-User-ID"],
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
     
     # 注册路由
@@ -256,7 +260,7 @@ def _extract_filename_from_file_dir(file_dir):
         return dir_name.split('.pdf-')[0] + '.pdf'
     return '未命名文档'
 
-def _process_image_paths(content, library_id, file_id):
+def _process_image_paths(content, library_id, file_id, user_id=None):
     """处理markdown内容中的图片路径"""
     import re
     image_pattern = r'!\[([^\]]*)\]\(([^)]+)\)'
@@ -269,6 +273,9 @@ def _process_image_paths(content, library_id, file_id):
             if image_path.startswith('images/'):
                 image_path = image_path[7:]
             api_path = f"/api/libraries/{library_id}/files/{file_id}/images/{image_path}"
+            # 如果提供了user_id，添加到URL参数中（用于img标签请求）
+            if user_id:
+                api_path += f"?user_id={user_id}"
             return f'![{alt_text}]({api_path})'
         return match.group(0)
     
@@ -431,6 +438,28 @@ def get_rag_system():
         
         return _rag_system_cache[cache_key]
 
+def get_current_user_id():
+    """从请求中获取当前用户ID"""
+    # 优先从请求头获取
+    user_id = request.headers.get('X-User-ID')
+    if user_id:
+        return user_id
+    # 从session获取
+    return session.get('user_id')
+
+def require_auth(f):
+    """鉴权装饰器"""
+    def decorated_function(*args, **kwargs):
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': '未登录，请先登录'}), 401
+        user_manager = get_user_manager()
+        if not user_manager.verify_user_id(user_id):
+            return jsonify({'error': '用户不存在或已失效'}), 401
+        return f(*args, **kwargs)
+    decorated_function.__name__ = f.__name__
+    return decorated_function
+
 def register_routes(app):
     """注册应用路由"""
     
@@ -443,7 +472,164 @@ def register_routes(app):
             response.headers.add('Access-Control-Allow-Methods', "*")
             return response
     
+    # 用户认证相关路由
+    @app.route('/api/auth/register', methods=['POST'])
+    def register():
+        """用户注册"""
+        try:
+            data = request.get_json()
+            username = data.get('username', '').strip()
+            password = data.get('password', '').strip()
+            
+            if not username or not password:
+                return jsonify({'error': '用户名和密码不能为空'}), 400
+            
+            if len(username) < 3 or len(username) > 20:
+                return jsonify({'error': '用户名长度必须在3-20个字符之间'}), 400
+            
+            if len(password) < 6:
+                return jsonify({'error': '密码长度至少6个字符'}), 400
+            
+            user_manager = get_user_manager()
+            user_data = user_manager.register(username, password)
+            
+            # 设置session
+            session['user_id'] = user_data['user_id']
+            session['username'] = user_data['username']
+            
+            return jsonify({
+                'success': True,
+                'user': user_data,
+                'message': '注册成功'
+            })
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            print(f"注册失败: {str(e)}")
+            traceback.print_exc()
+            return jsonify({'error': f'注册失败: {str(e)}'}), 500
+    
+    @app.route('/api/auth/login', methods=['POST'])
+    def login():
+        """用户登录"""
+        try:
+            data = request.get_json()
+            username = data.get('username', '').strip()
+            password = data.get('password', '').strip()
+            
+            if not username or not password:
+                return jsonify({'error': '用户名和密码不能为空'}), 400
+            
+            user_manager = get_user_manager()
+            user_data = user_manager.login(username, password)
+            
+            if not user_data:
+                return jsonify({'error': '用户名或密码错误'}), 401
+            
+            # 设置session
+            session['user_id'] = user_data['user_id']
+            session['username'] = user_data['username']
+            
+            return jsonify({
+                'success': True,
+                'user': user_data,
+                'message': '登录成功'
+            })
+        except Exception as e:
+            print(f"登录失败: {str(e)}")
+            traceback.print_exc()
+            return jsonify({'error': f'登录失败: {str(e)}'}), 500
+    
+    @app.route('/api/auth/logout', methods=['POST'])
+    def logout():
+        """用户登出"""
+        try:
+            session.clear()
+            return jsonify({
+                'success': True,
+                'message': '登出成功'
+            })
+        except Exception as e:
+            return jsonify({'error': f'登出失败: {str(e)}'}), 500
+    
+    @app.route('/api/auth/me', methods=['GET'])
+    def get_current_user():
+        """获取当前登录用户信息"""
+        try:
+            user_id = get_current_user_id()
+            if not user_id:
+                return jsonify({'error': '未登录'}), 401
+            
+            user_manager = get_user_manager()
+            user_data = user_manager.get_user_by_id(user_id)
+            
+            if not user_data:
+                return jsonify({'error': '用户不存在'}), 404
+            
+            return jsonify({
+                'success': True,
+                'user': {
+                    'user_id': user_data['user_id'],
+                    'username': user_data['username'],
+                    'created_at': user_data.get('created_at'),
+                    'last_login': user_data.get('last_login')
+                }
+            })
+        except Exception as e:
+            return jsonify({'error': f'获取用户信息失败: {str(e)}'}), 500
+    
+    @app.route('/api/auth/config', methods=['GET'])
+    @require_auth
+    def get_user_config():
+        """获取用户API配置"""
+        try:
+            user_id = get_current_user_id()
+            user_manager = get_user_manager()
+            user_data = user_manager.get_user_by_id(user_id)
+            
+            if not user_data:
+                return jsonify({'error': '用户不存在'}), 404
+            
+            return jsonify({
+                'success': True,
+                'config': {
+                    'openai_api_key': user_data.get('openai_api_key', ''),
+                    'openai_base_url': user_data.get('openai_base_url', ''),
+                    'openai_model': user_data.get('openai_model', ''),
+                    'openai_temperature': user_data.get('openai_temperature', ''),
+                    'mineru_api_token': user_data.get('mineru_api_token', '')
+                }
+            })
+        except Exception as e:
+            return jsonify({'error': f'获取配置失败: {str(e)}'}), 500
+    
+    @app.route('/api/auth/config', methods=['POST'])
+    @require_auth
+    def update_user_config():
+        """更新用户API配置"""
+        try:
+            user_id = get_current_user_id()
+            data = request.get_json()
+            
+            user_manager = get_user_manager()
+            user_manager.update_user_config(
+                user_id=user_id,
+                openai_api_key=data.get('openai_api_key', ''),
+                openai_base_url=data.get('openai_base_url', ''),
+                openai_model=data.get('openai_model', ''),
+                openai_temperature=data.get('openai_temperature', ''),
+                mineru_api_token=data.get('mineru_api_token', '')
+            )
+            
+            return jsonify({
+                'success': True,
+                'message': '配置更新成功'
+            })
+        except Exception as e:
+            return jsonify({'error': f'更新配置失败: {str(e)}'}), 500
+    
     @app.route('/api/upload', methods=['POST'])
+    @require_auth
     def upload_files():
         """处理文件上传 - 统一使用批量处理"""
         try:
@@ -464,36 +650,41 @@ def register_routes(app):
             enable_table = request.form.get('enable_table', 'true').lower() == 'true'
             language = request.form.get('language', 'ch')
             layout_model = request.form.get('layout_model', 'doclayout_yolo')
-            library_id = request.form.get('library_id', 'default')
+            library_id = request.form.get('library_id', '').strip()
+            
+            # 必须提供文库ID
+            if not library_id:
+                return jsonify({'error': '请先选择或创建文库'}), 400
+            
+            # 不允许使用default文库
+            if library_id == 'default':
+                return jsonify({'error': '请创建自己的文档库，不能使用默认文库'}), 400
+            
+            # 获取当前用户ID
+            user_id = get_current_user_id()
+            if not user_id:
+                return jsonify({'error': '未登录，请先登录'}), 401
             
             # 创建目录 - 放到指定文库下
             input_file_dir = app.config['INPUT_DIR']
             library_dir = app.config['OUTPUT_DIR'] / 'libraries' / library_id
-            library_dir.mkdir(parents=True, exist_ok=True)
             
-            # 确保文库有info.json文件
+            # 验证文库是否存在且属于当前用户
             info_file = library_dir / 'info.json'
             if not info_file.exists():
-                if library_id == 'default':
-                    library_info = {
-                        'id': 'default',
-                        'name': '默认文库',
-                        'display_name': '默认文库',
-                        'created_at': time.time(),
-                        'description': '系统默认文库，用于存储未指定文库的文件'
-                    }
-                else:
-                    # 对于其他文库，使用文库ID作为名称
-                    library_info = {
-                        'id': library_id,
-                        'name': library_id.replace('_', ' ').replace('-', ' '),
-                        'display_name': library_id.replace('_', ' ').replace('-', ' '),
-                        'created_at': time.time(),
-                        'description': ''
-                    }
-                
-                with open(info_file, 'w', encoding='utf-8') as f:
-                    json.dump(library_info, f, ensure_ascii=False, indent=2)
+                return jsonify({'error': '文库不存在，请先创建文库'}), 404
+            
+            # 验证文库是否属于当前用户
+            try:
+                with open(info_file, 'r', encoding='utf-8') as f:
+                    library_info = json.load(f)
+                if library_info.get('user_id') != user_id:
+                    return jsonify({'error': '无权访问此文库'}), 403
+            except Exception as e:
+                print(f"⚠️ 读取文库信息失败: {str(e)}")
+                return jsonify({'error': '无法读取文库信息'}), 500
+            
+            library_dir.mkdir(parents=True, exist_ok=True)
             
             # 保存文件并收集路径
             file_paths = []
@@ -605,10 +796,13 @@ def register_routes(app):
 
 
     @app.route('/api/files', methods=['GET'])
+    @require_auth
     def get_files():
         """获取已处理的文件列表，支持按文库ID过滤"""
         try:
-            library_id = request.args.get('library_id', 'default')
+            library_id = request.args.get('library_id', '')
+            if not library_id:
+                return jsonify({'error': '请提供文库ID'}), 400
             files = []
             libraries_dir = app.config['OUTPUT_DIR'] / 'libraries'
             
@@ -629,9 +823,23 @@ def register_routes(app):
             return jsonify({'error': f'获取文件列表失败: {str(e)}'}), 500
 
     @app.route('/api/libraries/<library_id>/files/<file_id>/content', methods=['GET'])
+    @require_auth
     def get_library_file_content(library_id, file_id):
         """获取指定文库中指定文件的markdown内容"""
         try:
+            user_id = get_current_user_id()
+            # 验证文库是否属于当前用户
+            library_dir = app.config['OUTPUT_DIR'] / 'libraries' / library_id
+            info_file = library_dir / 'info.json'
+            if info_file.exists():
+                try:
+                    with open(info_file, 'r', encoding='utf-8') as f:
+                        library_info = json.load(f)
+                    if library_info.get('user_id') != user_id:
+                        return jsonify({'error': '无权访问此文库'}), 403
+                except:
+                    return jsonify({'error': '无法读取文库信息'}), 500
+            
             file_dir, _ = _find_file_directory(library_id, file_id, app.config['OUTPUT_DIR'])
             
             if not file_dir or not file_dir.exists():
@@ -644,7 +852,8 @@ def register_routes(app):
             with open(md_files[0], 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            content = _process_image_paths(content, library_id, file_id)
+            user_id = get_current_user_id()
+            content = _process_image_paths(content, library_id, file_id, user_id=user_id)
             
             return jsonify({
                 'content': content,
@@ -688,8 +897,24 @@ def register_routes(app):
 
     @app.route('/api/libraries/<library_id>/files/<file_id>/images/<path:image_path>')
     def get_library_image(library_id, file_id, image_path):
-        """获取指定文库中指定文件的图片"""
+        """获取指定文库中指定文件的图片（图片请求可能通过img标签，无法携带请求头）"""
         try:
+            # 图片请求可能通过img标签，无法携带请求头，所以通过URL参数或session获取用户ID
+            user_id = request.args.get('user_id') or get_current_user_id()
+            
+            # 验证文库是否属于当前用户（如果提供了user_id）
+            if user_id:
+                library_dir = app.config['OUTPUT_DIR'] / 'libraries' / library_id
+                info_file = library_dir / 'info.json'
+                if info_file.exists():
+                    try:
+                        with open(info_file, 'r', encoding='utf-8') as f:
+                            library_info = json.load(f)
+                        if library_info.get('user_id') != user_id:
+                            return jsonify({'error': '无权访问此文库'}), 403
+                    except:
+                        pass
+            
             file_dir, found_library_id = _find_file_directory(library_id, file_id, app.config['OUTPUT_DIR'])
             
             if not file_dir:
@@ -799,26 +1024,13 @@ def register_routes(app):
         })
 
     @app.route('/api/libraries', methods=['GET'])
+    @require_auth
     def get_libraries():
         """获取用户文库列表"""
         try:
+            user_id = get_current_user_id()
             libraries = []
             libraries_dir = app.config['OUTPUT_DIR'] / 'libraries'
-            
-            # 确保默认文库存在
-            default_library_dir = libraries_dir / 'default'
-            if not default_library_dir.exists():
-                default_library_dir.mkdir(parents=True, exist_ok=True)
-                # 创建默认文库信息文件
-                default_info = {
-                    'id': 'default',
-                    'name': '默认文库',
-                    'display_name': '默认文库',
-                    'description': '系统默认文库',
-                    'created_at': datetime.now().isoformat()
-                }
-                with open(default_library_dir / 'info.json', 'w', encoding='utf-8') as f:
-                    json.dump(default_info, f, ensure_ascii=False, indent=2)
             
             if libraries_dir.exists():
                 for library_dir in libraries_dir.iterdir():
@@ -832,7 +1044,7 @@ def register_routes(app):
                             'file_count': 0
                         }
                         
-                        # 尝试读取info.json文件获取真实的中文名称
+                        # 尝试读取info.json文件获取真实的中文名称和用户ID
                         info_file = library_dir / 'info.json'
                         if info_file.exists():
                             try:
@@ -840,15 +1052,26 @@ def register_routes(app):
                                     saved_info = json.load(f)
                                     library_info['name'] = saved_info.get('name', library_info['name'])
                                     library_info['display_name'] = saved_info.get('display_name', library_info['name'])
+                                    library_info['created_at'] = saved_info.get('created_at', library_info['created_at'])
+                                    
+                                    # 只返回属于当前用户的文库
+                                    library_user_id = saved_info.get('user_id')
+                                    if library_user_id and library_user_id != user_id:
+                                        continue
                             except:
-                                pass
+                                # 如果读取失败，跳过此文库
+                                continue
+                        else:
+                            # 如果没有info.json，跳过（可能是旧数据）
+                            continue
                         
                         # 统计文件数量
                         file_count = 0
                         for file_dir in library_dir.iterdir():
-                            if file_dir.is_dir():
-                                metadata_file = file_dir / 'metadata.json'
-                                if metadata_file.exists():
+                            if file_dir.is_dir() and file_dir.name != 'info.json':
+                                # 检查是否有markdown文件
+                                md_files = list(file_dir.glob("*.md"))
+                                if md_files:
                                     file_count += 1
                         
                         library_info['file_count'] = file_count
@@ -856,7 +1079,7 @@ def register_routes(app):
             
             # 按创建时间排序
             libraries.sort(key=lambda x: x['created_at'], reverse=True)
-            print(f"找到 {len(libraries)} 个文库:")
+            print(f"用户 {user_id} 找到 {len(libraries)} 个文库:")
             for lib in libraries:
                 print(f"  - {lib['id']}: {lib['name']}")
             return jsonify({'data': libraries})
@@ -865,9 +1088,11 @@ def register_routes(app):
             return jsonify({'error': f'获取文库列表失败: {str(e)}'}), 500
 
     @app.route('/api/libraries', methods=['POST'])
+    @require_auth
     def create_library():
         """创建新文库"""
         try:
+            user_id = get_current_user_id()
             data = request.get_json()
             library_name = data.get('name', '').strip()
             
@@ -886,13 +1111,14 @@ def register_routes(app):
             library_dir = app.config['OUTPUT_DIR'] / 'libraries' / library_id
             library_dir.mkdir(parents=True, exist_ok=True)
             
-            # 保存文库信息
+            # 保存文库信息，包含用户ID
             library_info = {
                 'id': library_id,
                 'name': library_name,  # 保存用户输入的中文名称用于显示
                 'display_name': library_name,  # 显示名称
                 'created_at': time.time(),
-                'description': data.get('description', '')
+                'description': data.get('description', ''),
+                'user_id': user_id  # 添加用户ID
             }
             
             info_file = library_dir / 'info.json'
@@ -909,13 +1135,26 @@ def register_routes(app):
             return jsonify({'error': f'创建文库失败: {str(e)}'}), 500
 
     @app.route('/api/libraries/<library_id>/files', methods=['GET'])
+    @require_auth
     def get_library_files(library_id):
         """获取文库中的文件列表"""
         try:
+            user_id = get_current_user_id()
             library_dir = app.config['OUTPUT_DIR'] / 'libraries' / library_id
             
             if not library_dir.exists():
                 return jsonify({'data': []})
+            
+            # 验证文库是否属于当前用户
+            info_file = library_dir / 'info.json'
+            if info_file.exists():
+                try:
+                    with open(info_file, 'r', encoding='utf-8') as f:
+                        library_info = json.load(f)
+                    if library_info.get('user_id') != user_id:
+                        return jsonify({'error': '无权访问此文库'}), 403
+                except:
+                    return jsonify({'error': '无法读取文库信息'}), 500
             
             files = []
             for file_dir in library_dir.iterdir():
@@ -939,8 +1178,18 @@ def register_routes(app):
                     try:
                         with open(filename_info_file, 'r', encoding='utf-8') as f:
                             file_info = json.load(f)
+                        # 从filename_info.json获取file_id，如果没有则从目录名提取（去掉_b1后缀）
+                        file_id = file_info.get('file_id')
+                        if not file_id:
+                            # 从目录名提取file_id（去掉_b1后缀和文件名部分）
+                            dir_name = file_dir.name
+                            if '-' in dir_name:
+                                file_id = dir_name.rsplit('-', 1)[-1]
+                            else:
+                                file_id = dir_name.replace('_b1', '')
+                        
                         files.append({
-                            'id': file_dir.name,
+                            'id': file_id,
                             'name': file_info.get('original_filename', file_dir.name),
                             'created_at': file_info.get('upload_time', datetime.now().isoformat()),
                             'size': file_info.get('file_size', 0),
@@ -962,8 +1211,15 @@ def register_routes(app):
                             file_size = file.stat().st_size
                             break
                     
+                    # 从目录名提取file_id（去掉_b1后缀和文件名部分）
+                    dir_name = file_dir.name
+                    if '-' in dir_name:
+                        file_id = dir_name.rsplit('-', 1)[-1]
+                    else:
+                        file_id = dir_name.replace('_b1', '')
+                    
                     files.append({
-                        'id': file_dir.name,
+                        'id': file_id,
                         'name': original_filename,
                         'created_at': datetime.now().isoformat(),
                         'size': file_size,
@@ -980,13 +1236,26 @@ def register_routes(app):
             return jsonify({'error': f'获取文库文件失败: {str(e)}'}), 500
 
     @app.route('/api/libraries/<library_id>/files/<file_id>', methods=['DELETE'])
+    @require_auth
     def delete_library_file(library_id, file_id):
         """删除文库中的文件"""
         try:
+            user_id = get_current_user_id()
             library_dir = app.config['OUTPUT_DIR'] / 'libraries' / library_id
             
             if not library_dir.exists():
                 return jsonify({'error': '文库不存在'}), 404
+            
+            # 验证文库是否属于当前用户
+            info_file = library_dir / 'info.json'
+            if info_file.exists():
+                try:
+                    with open(info_file, 'r', encoding='utf-8') as f:
+                        library_info = json.load(f)
+                    if library_info.get('user_id') != user_id:
+                        return jsonify({'error': '无权访问此文库'}), 403
+                except:
+                    return jsonify({'error': '无法读取文库信息'}), 500
             
             file_dir = _find_file_in_library(library_dir, file_id)
             if not file_dir or not file_dir.exists():
@@ -994,8 +1263,8 @@ def register_routes(app):
             
             shutil.rmtree(file_dir)
             
-            # 如果文库为空且不是默认文库，删除文库目录
-            if library_dir.exists() and not any(library_dir.iterdir()) and library_dir.name != 'default':
+            # 如果文库为空，删除文库目录
+            if library_dir.exists() and not any(library_dir.iterdir()):
                 shutil.rmtree(library_dir)
             
             return jsonify({'message': '文件删除成功'})
@@ -1009,6 +1278,7 @@ def register_routes(app):
 
 
     @app.route('/api/libraries/<library_id>/files/<file_id>/process', methods=['POST'])
+    @require_auth
     def process_library_file(library_id, file_id):
         """处理文库中的文件"""
         try:
@@ -1074,6 +1344,7 @@ def register_routes(app):
             return jsonify({'error': f'处理文件失败: {str(e)}'}), 500
 
     @app.route('/api/libraries/<library_id>/files/<file_id>/rag', methods=['POST'])
+    @require_auth
     def query_paper_rag(library_id, file_id):
         """单篇论文RAG查询"""
         try:
@@ -1127,6 +1398,7 @@ def register_routes(app):
             return jsonify({'error': f'RAG查询失败: {str(e)}'}), 500
 
     @app.route('/api/libraries/<library_id>/rag', methods=['POST'])
+    @require_auth
     def query_library_rag(library_id):
         """整个文档库RAG查询"""
         try:
@@ -1173,6 +1445,7 @@ def register_routes(app):
             return jsonify({'error': f'RAG查询失败: {str(e)}'}), 500
 
     @app.route('/api/libraries/<library_id>/build_vector_store', methods=['POST'])
+    @require_auth
     def build_library_vector_store(library_id):
         """构建文库的向量数据库"""
         try:
@@ -1215,6 +1488,7 @@ def register_routes(app):
             return jsonify({'error': f'构建向量数据库失败: {str(e)}'}), 500
 
     @app.route('/api/libraries/<library_id>/vector_store_status', methods=['GET'])
+    @require_auth
     def get_vector_store_status(library_id):
         """获取向量数据库状态"""
         try:
@@ -1262,7 +1536,7 @@ if __name__ == '__main__':
             return "127.0.0.1"
     
     host = get_local_ip()
-    port = 5000
+    port = 6006
     
     print(f"🌐 后端服务启动信息:")
     print(f"   本地访问: http://127.0.0.1:{port}")

@@ -796,23 +796,23 @@ class MinerUAPI:
                 batch_files = file_paths[batch_idx:batch_idx + max_files_per_batch]
                 print(f"处理第 {batch_idx // max_files_per_batch + 1} 批次，文件数量: {len(batch_files)}")
                 
-                # 构建文件数据
+                # 构建文件数据 - 根据最新API文档格式
                 files_data = []
                 for file_path in batch_files:
                     if os.path.exists(file_path):
+                        file_name = os.path.basename(file_path)
                         files_data.append({
-                            "name": os.path.basename(file_path),
+                            "name": file_name,
                             "is_ocr": is_ocr,
-                            "data_id": f"{os.path.splitext(os.path.basename(file_path))[0]}_b{batch_idx // max_files_per_batch + 1}",
-                            "language": language,
+                            "data_id": f"{os.path.splitext(file_name)[0]}_b{batch_idx // max_files_per_batch + 1}",
                         })
                 
                 if not files_data:
                     print(f"批次 {batch_idx // max_files_per_batch + 1} 没有有效文件")
                     continue
                 
-                # 提交批次任务
-                batch_result = self._submit_single_batch(files_data, batch_files, enable_formula, language, layout_model, enable_table)
+                # 提交批次任务 - 默认使用vlm模型
+                batch_result = self._submit_single_batch(files_data, batch_files, enable_formula, language, layout_model, enable_table, model_version="vlm")
                 if batch_result['success']:
                     all_batch_ids.append(batch_result['batch_id'])
                     print(f"✅ 批次 {batch_idx // max_files_per_batch + 1} 提交成功，批次ID: {batch_result['batch_id']}")
@@ -837,19 +837,19 @@ class MinerUAPI:
                 'error': f'提交批量任务失败: {str(e)}'
             }
     
-    def _submit_single_batch(self, files_data, file_paths, enable_formula, language, layout_model, enable_table):
+    def _submit_single_batch(self, files_data, file_paths, enable_formula, language, layout_model, enable_table, model_version="vlm"):
         """提交单个批次任务"""
         try:
-            # 获取上传URL
+            # 获取上传URL - 根据最新API文档
             response = self.session.post(
                 f"{self.base_url}/file-urls/batch",
                 headers=self.headers,
                 json={
+                    "files": files_data,
+                    "model_version": model_version,
                     "enable_formula": enable_formula,
-                    "language": language,
-                    "layout_model": layout_model,
                     "enable_table": enable_table,
-                    "files": files_data
+                    "language": language
                 }
             )
             
@@ -916,12 +916,12 @@ class MinerUAPI:
                     'error': batch_data.get('msg', '获取批量状态失败')
                 }
             
-            # 分析处理状态
+            # 分析处理状态 - 根据最新API文档
             data_list = batch_data['data']['extract_result']
             total_files = len(data_list)
             completed_files = len([item for item in data_list if item.get('state') == 'done'])
             failed_files = len([item for item in data_list if item.get('state') == 'failed'])
-            processing_files = len([item for item in data_list if item.get('state') == 'processing'])
+            processing_files = len([item for item in data_list if item.get('state') in ['pending', 'running', 'converting', 'waiting-file']])
             
             return {
                 'success': True,
@@ -1161,26 +1161,25 @@ class MinerUAPI:
                     'error': f'第 {batch_index} 批次没有文件可处理'
                 }
             
-            # 构建文件数据
+            # 构建文件数据 - 根据最新API文档格式
             files_data = [{
                 "name": os.path.basename(file_path),
                 "is_ocr": is_ocr,
                 "data_id": f"{os.path.splitext(os.path.basename(file_path))[0]}_b{batch_index + 1}",
-                "language": language,
             } for file_path in batch_files]
             
             print(f"正在处理第 {batch_index + 1} 批次（共 {len(batch_files)} 个文件）")
             
-            # 获取上传URL
+            # 获取上传URL - 根据最新API文档
             response = self.session.post(
                 f"{self.base_url}/file-urls/batch",
                 headers=self.headers,
                 json={
+                    "files": files_data,
+                    "model_version": "vlm",  # 默认使用vlm，也可以使用pipeline
                     "enable_formula": enable_formula,
-                    "language": language,
-                    "layout_model": layout_model,
                     "enable_table": enable_table,
-                    "files": files_data
+                    "language": language
                 }
             )
             
@@ -1275,8 +1274,8 @@ class MinerUAPI:
             for item in data_list:
                 if item.get('state') == 'done' and 'full_zip_url' in item:
                     zip_url = item['full_zip_url']
-                    original_name = item['file_name']
-                    data_id = item['data_id']
+                    original_name = item.get('file_name', '')
+                    data_id = item.get('data_id', '')
                     
                     # 为每个文件创建独立的目录，使用data_id作为目录名
                     file_output_dir = os.path.join(output_dir, data_id)

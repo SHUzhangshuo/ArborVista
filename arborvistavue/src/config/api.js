@@ -14,11 +14,11 @@ export const getApiBaseUrl = () => {
 
   // 如果是本地开发环境，使用127.0.0.1
   if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return "http://127.0.0.1:5000";
+    return "http://127.0.0.1:6006";
   }
 
   // 如果是网络访问，使用当前主机地址
-  return `${protocol}//${hostname}:5000`;
+  return `${protocol}//${hostname}:6006`;
 };
 
 const API_BASE_URL = getApiBaseUrl();

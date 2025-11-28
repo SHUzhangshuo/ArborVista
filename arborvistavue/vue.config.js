@@ -5,11 +5,11 @@ module.exports = defineConfig({
   // 网络开发配置 - 支持外部访问
   devServer: {
     host: "0.0.0.0", // 允许外部访问
-    port: 8080,
+    port: 8008,
     // 添加代理配置 - 指向后端地址
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:5000",
+        target: "http://127.0.0.1:6006",
         changeOrigin: true,
         secure: false,
       },

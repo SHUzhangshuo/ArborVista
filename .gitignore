@@ -72,6 +72,9 @@ data/vectorDatabase/*
 !data/logs/.gitkeep
 !data/vectorDatabase/.gitkeep
 
+# User data (sensitive information)
+data/users.txt
+
 # Logs
 *.log
 logs/

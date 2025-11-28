@@ -548,8 +548,8 @@ export default {
           process.env.VUE_APP_API_URL ||
           (window.location.hostname === "localhost" ||
           window.location.hostname === "127.0.0.1"
-            ? "http://127.0.0.1:5000"
-            : `${window.location.protocol}//${window.location.hostname}:5000`);
+            ? "http://127.0.0.1:6006"
+            : `${window.location.protocol}//${window.location.hostname}:6006`);
 
         // 尝试加载向量数据库来检查是否存在
         const response = await axios.get(
@@ -579,8 +579,8 @@ export default {
           process.env.VUE_APP_API_URL ||
           (window.location.hostname === "localhost" ||
           window.location.hostname === "127.0.0.1"
-            ? "http://127.0.0.1:5000"
-            : `${window.location.protocol}//${window.location.hostname}:5000`);
+            ? "http://127.0.0.1:6006"
+            : `${window.location.protocol}//${window.location.hostname}:6006`);
 
         const response = await axios.get(`${API_BASE_URL}/api/auth/config`);
         if (response.data.success) {
@@ -652,8 +652,8 @@ export default {
           process.env.VUE_APP_API_URL ||
           (window.location.hostname === "localhost" ||
           window.location.hostname === "127.0.0.1"
-            ? "http://127.0.0.1:5000"
-            : `${window.location.protocol}//${window.location.hostname}:5000`);
+            ? "http://127.0.0.1:6006"
+            : `${window.location.protocol}//${window.location.hostname}:6006`);
 
         const response = await axios.post(
           `${API_BASE_URL}/api/libraries/${this.selectedLibrary}/build_vector_store`,

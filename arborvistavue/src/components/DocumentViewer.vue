@@ -1712,8 +1712,8 @@ export default {
           process.env.VUE_APP_API_URL ||
           (window.location.hostname === "localhost" ||
           window.location.hostname === "127.0.0.1"
-            ? "http://127.0.0.1:5000"
-            : `${window.location.protocol}//${window.location.hostname}:5000`);
+            ? "http://127.0.0.1:6006"
+            : `${window.location.protocol}//${window.location.hostname}:6006`);
 
         const response = await axios.get(`${API_BASE_URL}/api/auth/config`);
         if (response.data.success) {
@@ -1779,8 +1779,8 @@ export default {
           process.env.VUE_APP_API_URL ||
           (window.location.hostname === "localhost" ||
           window.location.hostname === "127.0.0.1"
-            ? "http://127.0.0.1:5000"
-            : `${window.location.protocol}//${window.location.hostname}:5000`);
+            ? "http://127.0.0.1:6006"
+            : `${window.location.protocol}//${window.location.hostname}:6006`);
 
         // 根据查询模式选择不同的API端点
         let url, payload;
@@ -1862,8 +1862,8 @@ export default {
           process.env.VUE_APP_API_URL ||
           (window.location.hostname === "localhost" ||
           window.location.hostname === "127.0.0.1"
-            ? "http://127.0.0.1:5000"
-            : `${window.location.protocol}//${window.location.hostname}:5000`);
+            ? "http://127.0.0.1:6006"
+            : `${window.location.protocol}//${window.location.hostname}:6006`);
 
         const response = await axios.post(
           `${API_BASE_URL}/api/libraries/${this.libraryId}/build_vector_store`,
