@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from server_config import BACKEND_PORT as SERVER_BACKEND_PORT, FRONTEND_PORT as SERVER_FRONTEND_PORT, PORT_MAPPING as SERVER_PORT_MAPPING, get_server_url
 
 class Config:
     """应用配置类"""
@@ -41,6 +42,26 @@ class Config:
     APP_NAME = "览树"
     APP_VERSION = "1.0.0"
     APP_DESCRIPTION = "智能论文阅读助手"
+    
+    # 服务器端口配置（从 server_config.py 读取）
+    BACKEND_PORT = SERVER_BACKEND_PORT
+    FRONTEND_PORT = SERVER_FRONTEND_PORT
+    
+    # 端口映射配置（从 server_config.py 读取）
+    PORT_MAPPING = SERVER_PORT_MAPPING
+    
+    @classmethod
+    def get_server_url(cls, local_port: str) -> str:
+        """
+        根据本地端口获取服务器映射URL
+        
+        Args:
+            local_port: 本地端口号（字符串格式）
+            
+        Returns:
+            服务器URL，如果未配置则返回None
+        """
+        return get_server_url(local_port)
     
     @classmethod
     def init_app(cls, app):

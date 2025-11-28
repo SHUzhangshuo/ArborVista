@@ -1536,11 +1536,16 @@ if __name__ == '__main__':
             return "127.0.0.1"
     
     host = get_local_ip()
-    port = 6006
+    port = app.config.get('BACKEND_PORT', 6006)
+    
+    # 获取服务器映射URL（如果配置了）
+    server_url = app.config.get('PORT_MAPPING', {}).get(str(port))
     
     print(f"🌐 后端服务启动信息:")
     print(f"   本地访问: http://127.0.0.1:{port}")
     print(f"   网络访问: http://{host}:{port}")
     print(f"   API文档: http://{host}:{port}/api/docs")
+    if server_url:
+        print(f"   服务器映射: {server_url}")
     
     app.run(debug=app.config['DEBUG'], host='0.0.0.0', port=port)
