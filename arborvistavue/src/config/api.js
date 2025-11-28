@@ -1,7 +1,11 @@
 // API 配置文件
 import axios from "axios";
+import { BACKEND_PORT, PORT_MAPPING } from "./server_config";
 
-// 获取当前页面的主机地址，支持网络访问
+// 默认后端端口
+const DEFAULT_BACKEND_PORT = String(BACKEND_PORT);
+
+// 获取当前页面的主机地址，支持网络访问和端口映射
 export const getApiBaseUrl = () => {
   // 优先使用环境变量
   if (process.env.VUE_APP_API_URL) {
@@ -12,13 +16,22 @@ export const getApiBaseUrl = () => {
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
 
-  // 如果是本地开发环境，使用127.0.0.1
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return "http://127.0.0.1:6006";
+  // 检查是否访问的是服务器映射地址（seetacloud.com 或 westb）
+  const isServerAccess =
+    hostname.includes("seetacloud.com") || hostname.includes("westb");
+
+  // 如果访问的是服务器地址，使用后端端口的映射URL（6006的映射）
+  if (isServerAccess && PORT_MAPPING[DEFAULT_BACKEND_PORT]) {
+    return PORT_MAPPING[DEFAULT_BACKEND_PORT];
   }
 
-  // 如果是网络访问，使用当前主机地址
-  return `${protocol}//${hostname}:6006`;
+  // 如果是本地开发环境，使用127.0.0.1
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return `http://127.0.0.1:${DEFAULT_BACKEND_PORT}`;
+  }
+
+  // 如果是网络访问，使用当前主机地址和配置的端口
+  return `${protocol}//${hostname}:${DEFAULT_BACKEND_PORT}`;
 };
 
 const API_BASE_URL = getApiBaseUrl();

@@ -1708,12 +1708,8 @@ export default {
     async checkOpenAIConfig() {
       try {
         const axios = (await import("axios")).default;
-        const API_BASE_URL =
-          process.env.VUE_APP_API_URL ||
-          (window.location.hostname === "localhost" ||
-          window.location.hostname === "127.0.0.1"
-            ? "http://127.0.0.1:6006"
-            : `${window.location.protocol}//${window.location.hostname}:6006`);
+        const { getApiBaseUrl } = await import("@/config/api");
+        const API_BASE_URL = getApiBaseUrl();
 
         const response = await axios.get(`${API_BASE_URL}/api/auth/config`);
         if (response.data.success) {
@@ -1775,12 +1771,8 @@ export default {
 
       try {
         const axios = (await import("axios")).default;
-        const API_BASE_URL =
-          process.env.VUE_APP_API_URL ||
-          (window.location.hostname === "localhost" ||
-          window.location.hostname === "127.0.0.1"
-            ? "http://127.0.0.1:6006"
-            : `${window.location.protocol}//${window.location.hostname}:6006`);
+        const { getApiBaseUrl } = await import("@/config/api");
+        const API_BASE_URL = getApiBaseUrl();
 
         // 根据查询模式选择不同的API端点
         let url, payload;
@@ -1858,12 +1850,8 @@ export default {
 
       try {
         const axios = (await import("axios")).default;
-        const API_BASE_URL =
-          process.env.VUE_APP_API_URL ||
-          (window.location.hostname === "localhost" ||
-          window.location.hostname === "127.0.0.1"
-            ? "http://127.0.0.1:6006"
-            : `${window.location.protocol}//${window.location.hostname}:6006`);
+        const { getApiBaseUrl } = await import("@/config/api");
+        const API_BASE_URL = getApiBaseUrl();
 
         const response = await axios.post(
           `${API_BASE_URL}/api/libraries/${this.libraryId}/build_vector_store`,
